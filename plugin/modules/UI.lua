@@ -90,8 +90,10 @@ function UI.Init(PluginRef, PluginScript)
 	end
 
 	local CoreGui = game:GetService("CoreGui")
-	local ScreenGui = CoreGui:FindFirstChild("BSpoofGui") or PluginScript:WaitForChild("BSpoofGui")
-	if ScreenGui.Parent ~= CoreGui then ScreenGui.Parent = CoreGui end
+	local Stale = CoreGui:FindFirstChild("BSpoofGui")
+	if Stale then Stale:Destroy() end
+	local ScreenGui = PluginScript:WaitForChild("BSpoofGui")
+	ScreenGui.Parent = CoreGui
 	local MainFrame = ScreenGui:WaitForChild("MainFrame")
 	local Sidebar = MainFrame:WaitForChild("Sidebar")
 	local Header = Sidebar:WaitForChild("Header")
