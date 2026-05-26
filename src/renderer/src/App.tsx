@@ -17,7 +17,7 @@ const iVar = {
   show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 320, damping: 26 } },
 }
 
-interface Config { cookie: string; apiKey: string; placeId: string; downloadPath: string }
+interface Config { cookie: string; apiKey: string; downloadPath: string }
 interface ServerStatus { listening: boolean; port?: number; error?: string }
 
 function CyberButton({
@@ -303,13 +303,11 @@ function InputField({
 function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) => void }) {
   const [Cookie, SetCookie] = useState('')
   const [ApiKey, SetApiKey] = useState('')
-  const [PlaceId, SetPlaceId] = useState(config.placeId)
   const [DownloadPath, SetDownloadPath] = useState(config.downloadPath)
 
   useEffect(() => {
-    SetPlaceId(config.placeId)
     SetDownloadPath(config.downloadPath)
-  }, [config.placeId, config.downloadPath])
+  }, [config.downloadPath])
   const [EffectivePath, SetEffectivePath] = useState('')
   const [Saved, SetSaved] = useState(false)
 
@@ -330,7 +328,6 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
     const Next: Config = {
       cookie: Cookie || config.cookie,
       apiKey: ApiKey || config.apiKey,
-      placeId: PlaceId,
       downloadPath: DownloadPath,
     }
     await window.api.saveConfig(Next)
@@ -339,7 +336,7 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
     SetApiKey('')
     SetSaved(true)
     setTimeout(() => SetSaved(false), 1500)
-  }, [Cookie, ApiKey, PlaceId, DownloadPath, config, onSave])
+  }, [Cookie, ApiKey, DownloadPath, config, onSave])
 
   return (
     <motion.div variants={cVar} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-8 w-full max-w-5xl mx-auto">
@@ -375,23 +372,6 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
           ]}
           hint="Required for reuploading assets to your account."
         />
-      </motion.div>
-
-      <motion.div variants={iVar} className="border-2 border-border bg-card p-8 flex flex-col gap-4">
-        <label className="text-xs font-bold font-display uppercase tracking-widest text-primary flex items-center gap-2">
-          <ChevronRight size={14} />
-          Place ID (optional)
-        </label>
-        <input
-          type="text"
-          value={PlaceId}
-          onChange={(E) => SetPlaceId(E.target.value)}
-          placeholder="e.g. 103612159864425"
-          className="w-full border-2 border-border bg-black/50 p-3 font-mono text-xs text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-primary transition-colors"
-        />
-        <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest">
-          Helps Roblox CDN serve assets owned by the place. Optional but recommended.
-        </p>
       </motion.div>
 
       <motion.div variants={iVar} className="border-2 border-border bg-card p-8 flex flex-col gap-6 relative group overflow-hidden">
@@ -920,7 +900,7 @@ export default function App() {
   }
 
   const [View, SetView] = useState('menu')
-  const [Config, SetConfig] = useState<Config>({ cookie: '', apiKey: '', placeId: '', downloadPath: '' })
+  const [Config, SetConfig] = useState<Config>({ cookie: '', apiKey: '', downloadPath: '' })
   const [ServerStatus, SetServerStatus] = useState<ServerStatus>({ listening: false })
 
   useEffect(() => {

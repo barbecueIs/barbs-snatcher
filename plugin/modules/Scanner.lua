@@ -1,17 +1,6 @@
-local MarketplaceService = game:GetService("MarketplaceService")
 local Selection = game:GetService("Selection")
 
 local Scanner = {}
-
-function Scanner.GetRealSoundName(Id)
-	local Success, Info = pcall(function()
-		return MarketplaceService:GetProductInfo(tonumber(Id), Enum.InfoType.Asset)
-	end)
-	if Success and Info and Info.Name and Info.Name ~= "" then
-		return Info.Name
-	end
-	return nil
-end
 
 function Scanner.GetInstances(ScopeMode)
 	if ScopeMode == "all" then return game:GetDescendants() end
@@ -44,11 +33,10 @@ function Scanner.ScanForSounds(Instances, Config)
 	for _, Inst in ipairs(Instances) do
 		if Inst:IsA("Sound") and Inst.SoundId ~= "" then
 			local Id = Inst.SoundId:match("%d+")
-			if Id and not Seen[Id] then
+			if Id and Id ~= "0" and not Seen[Id] then
 				Seen[Id] = true
 				table.insert(Ids, Id)
-				local RealName = Scanner.GetRealSoundName(Id)
-				Names[Id] = RealName or Inst.Name
+				Names[Id] = Inst.Name
 			end
 		end
 
@@ -59,8 +47,7 @@ function Scanner.ScanForSounds(Instances, Config)
 					if not Seen[MatchedId] then
 						Seen[MatchedId] = true
 						table.insert(Ids, MatchedId)
-						local RealName = Scanner.GetRealSoundName(MatchedId)
-						Names[MatchedId] = RealName or Inst.Name
+						Names[MatchedId] = Inst.Name
 					end
 				end
 			end
@@ -71,8 +58,7 @@ function Scanner.ScanForSounds(Instances, Config)
 			if not Seen[Id] then
 				Seen[Id] = true
 				table.insert(Ids, Id)
-				local RealName = Scanner.GetRealSoundName(Id)
-				Names[Id] = RealName or Inst.Name
+				Names[Id] = Inst.Name
 			end
 		end
 
@@ -81,8 +67,7 @@ function Scanner.ScanForSounds(Instances, Config)
 				if not Seen[MatchedId] then
 					Seen[MatchedId] = true
 					table.insert(Ids, MatchedId)
-					local RealName = Scanner.GetRealSoundName(MatchedId)
-					Names[MatchedId] = RealName or Inst.Name
+					Names[MatchedId] = Inst.Name
 				end
 			end
 		end

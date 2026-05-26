@@ -40,31 +40,6 @@ export function SanitizeName(Raw: string): string {
   return Clean || 'sound'
 }
 
-async function FetchAssetName(Id: string, UserAgent: string): Promise<string> {
-  try {
-    const Res = await fetch(`https://api.roblox.com/marketplace/productinfo?assetId=${Id}`, {
-      headers: { 'User-Agent': UserAgent },
-      signal: AbortSignal.timeout(6000)
-    })
-    if (!Res.ok) return Id
-    const Body = (await Res.json()) as { Name?: string }
-    if (!Body.Name) return Id
-    return `${SanitizeName(Body.Name)}_${Id}`
-  } catch {
-    return Id
-  }
-}
-
-function FindExistingFile(Dir: string, Id: string): string | null {
-  if (!fs.existsSync(Dir)) return null
-  try {
-    for (const File of fs.readdirSync(Dir)) {
-      const Base = File.replace(/\.[^.]+$/, '')
-      if (Base === Id || Base.endsWith(`_${Id}`)) return path.join(Dir, File)
-    }
-  } catch { /* ignore */ }
-  return null
-}
 
 function SanitizeCookie(Raw: string): string {
   if (!Raw || !Raw.trim()) return ''

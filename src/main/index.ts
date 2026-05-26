@@ -14,7 +14,6 @@ import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound, SanitizeName }
 interface Config {
   cookie: string
   apiKey: string
-  placeId: string
   downloadPath: string
 }
 
@@ -66,11 +65,10 @@ function LoadConfig(): Config {
     return {
       cookie: Raw.cookie ?? '',
       apiKey: Raw.apiKey ?? '',
-      placeId: Raw.placeId ?? '',
       downloadPath: Raw.downloadPath ?? '',
     }
   } catch {
-    return { cookie: '', apiKey: '', placeId: '', downloadPath: '' }
+    return { cookie: '', apiKey: '', downloadPath: '' }
   }
 }
 
@@ -151,12 +149,12 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
     return
   }
 
-  const CONCURRENCY = 24
+  const CONCURRENCY = 8
   const Queue = [...Ids]
   const Mapping: Record<string, string> = {}
   const FailReasons: Record<string, number> = {}
   let Done = 0, Ok = 0, Failed = 0
-  const EffPlaceIds = PlaceIds.length > 0 ? PlaceIds : (Cfg.placeId ? [Cfg.placeId] : [])
+  const EffPlaceIds = PlaceIds
 
   const BumpReason = (Msg: string | null): void => {
     const Key = (Msg ?? 'unknown error').slice(0, 80)
