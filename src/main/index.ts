@@ -108,7 +108,7 @@ function SetState(Patch: Partial<JobState>): void {
   MainWindow?.webContents.send('job-update', State)
 }
 
-async function RunJob(Ids: string[], Names: Record<string, string>): Promise<void> {
+async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: string[]): Promise<void> {
   const Cfg = LoadConfig()
   if (!Cfg.apiKey) {
     SetState({ status: 'error', error: 'No API key set. Go to Settings and add your Open Cloud API key.' })
@@ -151,11 +151,12 @@ async function RunJob(Ids: string[], Names: Record<string, string>): Promise<voi
     return
   }
 
-  const CONCURRENCY = 8
+  const CONCURRENCY = 24
   const Queue = [...Ids]
   const Mapping: Record<string, string> = {}
   const FailReasons: Record<string, number> = {}
   let Done = 0, Ok = 0, Failed = 0
+  const EffPlaceIds = PlaceIds.length > 0 ? PlaceIds : (Cfg.placeId ? [Cfg.placeId] : [])
 
   const BumpReason = (Msg: string | null): void => {
     const Key = (Msg ?? 'unknown error').slice(0, 80)
@@ -173,9 +174,9 @@ async function RunJob(Ids: string[], Names: Record<string, string>): Promise<voi
       SetState({ outputs: [...Outputs] })
 
       const SoundName = SanitizeName(Names[Id] || 'Sound')
-      const CleanName = `${Entry.index}_${SoundName}`
+      const CleanName = `${Entry.index}_(${SoundName})_${Id}`
 
-      const DlResult = await DownloadSound(Id, SessionDir, Cfg.cookie, CsrfToken, Cfg.apiKey, Cfg.placeId, CleanName)
+      const DlResult = await DownloadSound(Id, SessionDir, Cfg.cookie, CsrfToken, Cfg.apiKey, EffPlaceIds, CleanName)
 
       if (!DlResult.Ok || !DlResult.FilePath) {
         Done++
@@ -232,7 +233,7 @@ function HandleRequest(Req: http.IncomingMessage, Res: http.ServerResponse): voi
     Req.on('data', (Chunk) => { Body += Chunk })
     Req.on('end', () => {
       try {
-        const Data = JSON.parse(Body) as { ids?: string[]; names?: Record<string, string>; placeId?: string }
+        const Data = JSON.parse(Body) as { ids?: string[]; names?: Record<string, string>; placeIds?: string[] }
         const Ids = (Data.ids ?? []).filter((Id) => /^\d+$/.test(Id))
         if (Ids.length === 0) {
           Res.writeHead(400)
@@ -241,7 +242,7 @@ function HandleRequest(Req: http.IncomingMessage, Res: http.ServerResponse): voi
         }
         Res.writeHead(200)
         Res.end(JSON.stringify({ ok: true, count: Ids.length }))
-        RunJob(Ids, Data.names ?? {})
+        RunJob(Ids, Data.names ?? {}, Data.placeIds ?? [])
       } catch {
         Res.writeHead(400)
         Res.end(JSON.stringify({ error: 'invalid JSON' }))

@@ -3,8 +3,8 @@ import * as path from 'path'
 import FormData from 'form-data'
 
 const ALL_EXTS = ['ogg', 'mp3', 'm4a', 'flac', 'wav']
-const MAX_RETRIES = 3
-const RETRY_MS = 800
+const MAX_RETRIES = 2
+const RETRY_MS = 150
 
 const Sleep = (Ms: number): Promise<void> => new Promise((R) => setTimeout(R, Ms))
 
@@ -128,98 +128,99 @@ async function FetchBinary(
   }
 }
 
+async function TryCdnWithPlaceId(
+  Id: string,
+  Headers: Record<string, string>
+): Promise<Buffer | null> {
+  const [V2Result, V1Result] = await Promise.allSettled([
+    (async (): Promise<Buffer | null> => {
+      try {
+        const Meta = await fetch(
+          `https://assetdelivery.roblox.com/v2/asset?id=${Id}`,
+          { headers: Headers, signal: AbortSignal.timeout(10000) }
+        )
+        if (!Meta.ok) return null
+        const MetaBody = (await Meta.json()) as { location?: string; locations?: { assetUrl?: string }[] }
+        const CdnUrl = MetaBody.location ?? MetaBody.locations?.[0]?.assetUrl
+        return CdnUrl ? FetchBinary(CdnUrl, Headers) : null
+      } catch {
+        return null
+      }
+    })(),
+    FetchBinary(`https://assetdelivery.roblox.com/v1/asset/?id=${Id}`, Headers),
+  ])
+  const V2Buf = V2Result.status === 'fulfilled' ? V2Result.value : null
+  const V1Buf = V1Result.status === 'fulfilled' ? V1Result.value : null
+  return V2Buf ?? V1Buf
+}
+
 export async function DownloadSound(
   Id: string,
   Dir: string,
   Cookie: string,
   CsrfToken: string,
   ApiKey: string,
-  PlaceId: string,
+  PlaceIds: string[],
   FileName: string
 ): Promise<{ Ok: boolean; FilePath: string | null; Error: string | null }> {
   for (const Ext of ALL_EXTS) {
     const P = path.join(Dir, `${FileName}.${Ext}`)
-    if (fs.existsSync(P)) {
-      return { Ok: true, FilePath: P, Error: null }
+    if (fs.existsSync(P)) return { Ok: true, FilePath: P, Error: null }
+  }
+
+  let AudioBuf: Buffer | null = null
+  let LastErr = 'unknown'
+
+  if (ApiKey) {
+    try {
+      const Res = await fetch(`https://apis.roblox.com/assets/v1/assets/${Id}/content`, {
+        headers: { 'x-api-key': ApiKey, Accept: '*/*' },
+        signal: AbortSignal.timeout(20000)
+      })
+      if (Res.ok) {
+        const Buf = Buffer.from(await Res.arrayBuffer())
+        if (IsValidAudio(Buf)) AudioBuf = Buf
+        else LastErr = 'invalid audio data'
+      } else {
+        LastErr = `HTTP ${Res.status}`
+      }
+    } catch (E: unknown) {
+      LastErr = E instanceof Error ? E.message : 'fetch error'
     }
   }
 
-  const CdnHeaders = BuildCdnHeaders(Cookie, CsrfToken, PlaceId)
-
-  for (let Attempt = 1; Attempt <= MAX_RETRIES; Attempt++) {
-    let AudioBuf: Buffer | null = null
-    let LastErr = 'unknown'
-
-    if (ApiKey && !AudioBuf) {
-      try {
-        const Res = await fetch(`https://apis.roblox.com/assets/v1/assets/${Id}/content`, {
-          headers: { 'x-api-key': ApiKey, Accept: '*/*' },
-          signal: AbortSignal.timeout(20000)
-        })
-        if (Res.ok) {
-          const Buf = Buffer.from(await Res.arrayBuffer())
-          if (IsValidAudio(Buf)) AudioBuf = Buf
-          else LastErr = 'invalid audio data'
-        } else {
-          LastErr = `HTTP ${Res.status}`
+  if (!AudioBuf) {
+    const PidsToTry = PlaceIds.length > 0 ? PlaceIds : ['']
+    outer: for (const Pid of PidsToTry) {
+      const H = BuildCdnHeaders(Cookie, CsrfToken, Pid)
+      for (let Attempt = 1; Attempt <= MAX_RETRIES; Attempt++) {
+        const CdnBuf = await TryCdnWithPlaceId(Id, H)
+        if (CdnBuf) {
+          AudioBuf = CdnBuf
+          break outer
         }
-      } catch (E: unknown) {
-        LastErr = E instanceof Error ? E.message : 'fetch error'
+        if (Attempt < MAX_RETRIES) await Sleep(RETRY_MS)
       }
     }
-
-    if (!AudioBuf) {
-      try {
-        const Meta = await fetch(
-          `https://assetdelivery.roblox.com/v2/asset?id=${Id}`,
-          { headers: CdnHeaders, signal: AbortSignal.timeout(10000) }
-        )
-        if (Meta.ok) {
-          const MetaBody = (await Meta.json()) as { location?: string; locations?: { assetUrl?: string }[] }
-          const CdnUrl = MetaBody.location ?? MetaBody.locations?.[0]?.assetUrl
-          if (CdnUrl) {
-            AudioBuf = await FetchBinary(CdnUrl, CdnHeaders)
-            if (!AudioBuf) LastErr = 'invalid audio data from CDN'
-          } else {
-            LastErr = 'no location in v2 response'
-          }
-        } else {
-          LastErr = `HTTP ${Meta.status}`
-        }
-      } catch (E: unknown) {
-        LastErr = E instanceof Error ? E.message : 'fetch error'
-      }
-    }
-
-    if (!AudioBuf) {
-      AudioBuf = await FetchBinary(
-        `https://assetdelivery.roblox.com/v1/asset/?id=${Id}`,
-        CdnHeaders
-      )
-      if (!AudioBuf) LastErr = 'all strategies failed'
-    }
-
-    if (AudioBuf) {
-      const Ext = DetectExt(AudioBuf)
-      const FilePath = path.join(Dir, `${FileName}.${Ext}`)
-      fs.writeFileSync(FilePath, AudioBuf)
-      return { Ok: true, FilePath, Error: null }
-    }
-
-    const IsHard = LastErr.includes('403') || LastErr.includes('401') || LastErr.includes('404')
-    if (IsHard || Attempt === MAX_RETRIES) return { Ok: false, FilePath: null, Error: LastErr }
-    await Sleep(RETRY_MS * Attempt)
+    if (!AudioBuf) LastErr = 'all CDN strategies failed'
   }
 
-  return { Ok: false, FilePath: null, Error: 'all retries exhausted' }
+  if (AudioBuf) {
+    const Ext = DetectExt(AudioBuf)
+    const FilePath = path.join(Dir, `${FileName}.${Ext}`)
+    fs.writeFileSync(FilePath, AudioBuf)
+    return { Ok: true, FilePath, Error: null }
+  }
+
+  return { Ok: false, FilePath: null, Error: LastErr }
 }
 
 async function PollOperation(
   OpPath: string,
   ApiKey: string
 ): Promise<{ NewId: string | null; Error: string | null }> {
-  for (let I = 0; I < 30; I++) {
-    await Sleep(1000)
+  await Sleep(400)
+  for (let I = 0; I < 25; I++) {
     try {
       const Res = await fetch(`https://apis.roblox.com/assets/v1/${OpPath}`, {
         headers: { 'x-api-key': ApiKey },
@@ -244,8 +245,9 @@ async function PollOperation(
     } catch (E: unknown) {
       return { NewId: null, Error: E instanceof Error ? E.message : 'poll exception' }
     }
+    await Sleep(400)
   }
-  return { NewId: null, Error: 'operation timed out after 30s' }
+  return { NewId: null, Error: 'operation timed out after 10s' }
 }
 
 const MIME_MAP: Record<string, string> = {
