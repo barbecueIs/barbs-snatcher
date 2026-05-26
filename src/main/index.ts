@@ -298,7 +298,7 @@ function CopyFolderSync(From: string, To: string): void {
 function CreateInstallerWindow(): void {
   MainWindow = new BrowserWindow({
     width: 600,
-    height: 480,
+    height: 560,
     show: false,
     autoHideMenuBar: true,
     frame: false,
