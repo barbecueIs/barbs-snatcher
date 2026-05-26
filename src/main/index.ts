@@ -236,7 +236,10 @@ function StartHttpServer(): void {
   })
 }
 
-const IsInstaller = app.getPath('exe').toLowerCase().includes('setup') || process.argv.includes('--installer')
+const IsInstaller =
+  (process.env.PORTABLE_EXECUTABLE_PATH && process.env.PORTABLE_EXECUTABLE_PATH.toLowerCase().includes('setup')) ||
+  app.getPath('exe').toLowerCase().includes('setup') ||
+  process.argv.includes('--installer')
 
 const GetDefaultInstallDir = (): string => join(app.getPath('home'), 'AppData', 'Local', 'barbs-snatcher')
 
