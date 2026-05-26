@@ -272,18 +272,20 @@ export async function UploadSound(
 
     const Form = new FormData()
     Form.append('request', ReqJson, { contentType: 'application/json' })
-    Form.append('fileContent', fs.createReadStream(FilePath), {
+    Form.append('fileContent', FileData, {
       filename: `sound_${OldId}.${Ext}`,
       contentType: MimeType,
     })
 
+    const FormBuffer = Form.getBuffer()
     const Res = await fetch('https://apis.roblox.com/assets/v1/assets', {
       method: 'POST',
       headers: {
         'x-api-key': ApiKey,
         ...Form.getHeaders(),
+        'Content-Length': FormBuffer.length.toString(),
       },
-      body: Form as any,
+      body: FormBuffer,
       signal: AbortSignal.timeout(30000)
     })
 
