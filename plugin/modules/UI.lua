@@ -37,18 +37,16 @@ function UI.RebuildPlaceList()
 		Row.Name = "PlaceEntry"
 		Row.Size = UDim2.new(1, 0, 0, 28)
 		Row.BackgroundColor3 = ROW_BG
-		Row.BorderSizePixel = 0
+		Row.BackgroundTransparency = 0
+		Row.BorderSizePixel = 1
 		Row.Parent = UI.PlaceList
-
-		local Corner = Instance.new("UICorner")
-		Corner.CornerRadius = UDim.new(0, 3)
-		Corner.Parent = Row
 
 		local IdLabel = Instance.new("TextLabel")
 		IdLabel.Name = "IdLabel"
-		IdLabel.Size = UDim2.new(1, -36, 1, 0)
+		IdLabel.Size = UDim2.new(1, -38, 1, 0)
 		IdLabel.Position = UDim2.new(0, 8, 0, 0)
 		IdLabel.BackgroundTransparency = 1
+		IdLabel.BorderSizePixel = 1
 		IdLabel.Text = Id
 		IdLabel.TextColor3 = TEXT_COLOR
 		IdLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -58,19 +56,16 @@ function UI.RebuildPlaceList()
 
 		local RemoveBtn = Instance.new("TextButton")
 		RemoveBtn.Name = "RemoveBtn"
-		RemoveBtn.Size = UDim2.new(0, 24, 0, 20)
-		RemoveBtn.Position = UDim2.new(1, -30, 0.5, -10)
-		RemoveBtn.BackgroundColor3 = Color3.fromHex("1e0000")
-		RemoveBtn.BorderSizePixel = 0
-		RemoveBtn.Text = "×"
-		RemoveBtn.TextColor3 = Color3.fromHex("ff4444")
+		RemoveBtn.Size = UDim2.new(0, 20, 0, 20)
+		RemoveBtn.Position = UDim2.new(1, -28, 0.5, -10)
+		RemoveBtn.BackgroundColor3 = BORDER_COLOR
+		RemoveBtn.BackgroundTransparency = 0
+		RemoveBtn.BorderSizePixel = 1
+		RemoveBtn.Text = "x"
+		RemoveBtn.TextColor3 = MUTED_COLOR
 		RemoveBtn.Font = Enum.Font.GothamBold
-		RemoveBtn.TextSize = 14
+		RemoveBtn.TextSize = 10
 		RemoveBtn.Parent = Row
-
-		local RCorner = Instance.new("UICorner")
-		RCorner.CornerRadius = UDim.new(0, 3)
-		RCorner.Parent = RemoveBtn
 
 		local CapturedId = Id
 		RemoveBtn.MouseButton1Click:Connect(function()
@@ -85,117 +80,6 @@ function UI.RebuildPlaceList()
 		end)
 	end
 	UI.PlaceList.CanvasSize = UDim2.new(0, 0, 0, #UI.PlaceIds * 32)
-end
-
-function UI.BuildPlaceSection(Inner)
-	local Section = Instance.new("Frame")
-	Section.Name = "PlaceSection"
-	Section.Size = UDim2.new(1, 0, 0, 160)
-	Section.Position = UDim2.new(0, 0, 0, 330)
-	Section.BackgroundTransparency = 1
-	Section.BorderSizePixel = 0
-	Section.Parent = Inner
-
-	local SectionLabel = Instance.new("TextLabel")
-	SectionLabel.Name = "PlaceSectionLabel"
-	SectionLabel.Size = UDim2.new(1, -40, 0, 20)
-	SectionLabel.Position = UDim2.new(0, 20, 0, 0)
-	SectionLabel.BackgroundTransparency = 1
-	SectionLabel.Text = "PLACE IDS"
-	SectionLabel.TextColor3 = MUTED_COLOR
-	SectionLabel.TextXAlignment = Enum.TextXAlignment.Left
-	SectionLabel.Font = Enum.Font.GothamBold
-	SectionLabel.TextSize = 10
-	SectionLabel.Parent = Section
-
-	local AddRow = Instance.new("Frame")
-	AddRow.Name = "AddRow"
-	AddRow.Size = UDim2.new(1, -40, 0, 32)
-	AddRow.Position = UDim2.new(0, 20, 0, 24)
-	AddRow.BackgroundTransparency = 1
-	AddRow.BorderSizePixel = 0
-	AddRow.Parent = Section
-
-	local InputBg = Instance.new("Frame")
-	InputBg.Name = "InputBg"
-	InputBg.Size = UDim2.new(1, -50, 1, 0)
-	InputBg.Position = UDim2.new(0, 0, 0, 0)
-	InputBg.BackgroundColor3 = ROW_BG
-	InputBg.BorderSizePixel = 0
-	InputBg.Parent = AddRow
-
-	local IBCorner = Instance.new("UICorner")
-	IBCorner.CornerRadius = UDim.new(0, 4)
-	IBCorner.Parent = InputBg
-
-	local Input = Instance.new("TextBox")
-	Input.Name = "PlaceInput"
-	Input.Size = UDim2.new(1, -12, 1, 0)
-	Input.Position = UDim2.new(0, 6, 0, 0)
-	Input.BackgroundTransparency = 1
-	Input.PlaceholderText = "PLACE ID..."
-	Input.Text = ""
-	Input.TextColor3 = TEXT_COLOR
-	Input.PlaceholderColor3 = MUTED_COLOR
-	Input.TextXAlignment = Enum.TextXAlignment.Left
-	Input.Font = Enum.Font.GothamBold
-	Input.TextSize = 10
-	Input.ClearTextOnFocus = false
-	Input.Parent = InputBg
-
-	local AddBtn = Instance.new("TextButton")
-	AddBtn.Name = "AddBtn"
-	AddBtn.Size = UDim2.new(0, 44, 1, 0)
-	AddBtn.Position = UDim2.new(1, -44, 0, 0)
-	AddBtn.BackgroundColor3 = ACCENT_COLOR
-	AddBtn.BorderSizePixel = 0
-	AddBtn.Text = "ADD"
-	AddBtn.TextColor3 = Color3.fromHex("000000")
-	AddBtn.Font = Enum.Font.GothamBold
-	AddBtn.TextSize = 10
-	AddBtn.Parent = AddRow
-
-	local ABCorner = Instance.new("UICorner")
-	ABCorner.CornerRadius = UDim.new(0, 4)
-	ABCorner.Parent = AddBtn
-
-	local PlaceList = Instance.new("ScrollingFrame")
-	PlaceList.Name = "PlaceList"
-	PlaceList.Size = UDim2.new(1, -40, 0, 96)
-	PlaceList.Position = UDim2.new(0, 20, 0, 62)
-	PlaceList.BackgroundTransparency = 1
-	PlaceList.BorderSizePixel = 0
-	PlaceList.ScrollBarThickness = 3
-	PlaceList.ScrollBarImageColor3 = ACCENT_COLOR
-	PlaceList.CanvasSize = UDim2.new(0, 0, 0, 0)
-	PlaceList.Parent = Section
-
-	local ListLayout = Instance.new("UIListLayout")
-	ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	ListLayout.Padding = UDim.new(0, 4)
-	ListLayout.Parent = PlaceList
-
-	UI.PlaceList = PlaceList
-
-	local function TryAddId()
-		local Val = Input.Text:match("^%s*(%d+)%s*$")
-		if not Val or Val == "" then return end
-		for _, Existing in ipairs(UI.PlaceIds) do
-			if Existing == Val then
-				Input.Text = ""
-				return
-			end
-		end
-		table.insert(UI.PlaceIds, Val)
-		UI.SavePlaceIds()
-		UI.RebuildPlaceList()
-		Input.Text = ""
-	end
-
-	AddBtn.MouseButton1Click:Connect(TryAddId)
-	Input.FocusLost:Connect(function(Pressed)
-		if Pressed then TryAddId() end
-	end)
 end
 
 function UI.Init(PluginRef, PluginScript)
@@ -255,7 +139,8 @@ function UI.Init(PluginRef, PluginScript)
 	local BtnSoundSel = UI.SetupCyberBtn(SoundsSection:WaitForChild("SelectedCont"))
 	UI.StatusLabel = SoundsSection:WaitForChild("StatusLabel")
 
-	local Toggles = VConfig:WaitForChild("Inner"):WaitForChild("Toggles")
+	local ConfigInner = VConfig:WaitForChild("Inner")
+	local Toggles = ConfigInner:WaitForChild("Toggles")
 	UI.RowScripts = Toggles:WaitForChild("LookInScripts")
 	UI.RowIntValues = Toggles:WaitForChild("LookInIntValues")
 	UI.RowAllValues = Toggles:WaitForChild("LookInAllValues")
@@ -263,8 +148,32 @@ function UI.Init(PluginRef, PluginScript)
 	UI.SetupToggle(UI.RowIntValues)
 	UI.SetupToggle(UI.RowAllValues)
 
-	UI.BuildPlaceSection(VConfig:WaitForChild("Inner"))
+	local PlaceSection = ConfigInner:WaitForChild("PlaceSection")
+	local InputRow = PlaceSection:WaitForChild("InputRow")
+	local PlaceInput = InputRow:WaitForChild("PlaceInput")
+	local AddBtn = UI.SetupCyberBtn(InputRow:WaitForChild("AddCont"))
+	UI.PlaceList = PlaceSection:WaitForChild("PlaceList")
 	UI.RebuildPlaceList()
+
+	local function TryAddId()
+		local Val = PlaceInput.Text:match("^%s*(%d+)%s*$")
+		if not Val or Val == "" then return end
+		for _, Existing in ipairs(UI.PlaceIds) do
+			if Existing == Val then
+				PlaceInput.Text = ""
+				return
+			end
+		end
+		table.insert(UI.PlaceIds, Val)
+		UI.SavePlaceIds()
+		UI.RebuildPlaceList()
+		PlaceInput.Text = ""
+	end
+
+	AddBtn.MouseButton1Click:Connect(TryAddId)
+	PlaceInput.FocusLost:Connect(function(Pressed)
+		if Pressed then TryAddId() end
+	end)
 
 	local ActiveView = VMain
 
