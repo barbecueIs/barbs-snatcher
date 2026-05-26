@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 4%;
+    --foreground: 0 0% 95%;
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 90%;
+    --primary: 74 100% 50%;
+    --primary-foreground: 240 10% 4%;
+    --secondary: 240 5% 15%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 240 5% 15%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 74 100% 50%;
+    --accent-foreground: 240 10% 4%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 14%;
+    --input: 240 5% 15%;
+    --ring: 74 100% 50%;
+    --radius: 0rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background-image:
+      radial-gradient(circle at 100% 0%, rgba(204,255,0,0.04) 0%, transparent 30%),
+      radial-gradient(circle at 0% 100%, rgba(204,255,0,0.02) 0%, transparent 30%);
+  }
+}
+
+.noise-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+}
+
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(rgba(204,255,0,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(204,255,0,0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.brutalist-shadow {
+  box-shadow: 4px 4px 0px 0px hsl(var(--primary));
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.brutalist-shadow:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0px 0px hsl(var(--primary)); }
+.brutalist-shadow:active { transform: translate(4px, 4px); box-shadow: 0px 0px 0px 0px hsl(var(--primary)); }
+
+.scrollbar-thin::-webkit-scrollbar { width: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary)); }

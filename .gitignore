@@ -1,0 +1,11 @@
+node_modules/
+out/
+release/
+dist/
+.eslintcache
+*.log
+.vscode/
+.env
+.env.*
+.npmrc
+*.local

@@ -1,0 +1,32 @@
+appId: com.barbssnatcher.app
+productName: Barb's Snatcher
+directories:
+  buildResources: build
+  output: release
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,.prettierrc.yaml,README.md}'
+  - '!{.env,.env.*,.npmrc}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{snatch.py,anim_snatch.py,*.exe_extracted,decompile_pyc.py,pyinstxtractor.py}'
+asarUnpack:
+  - resources/**
+asar: true
+forceCodeSigning: false
+win:
+  executableName: barbs-snatcher
+  target:
+    - squirrel
+    - portable
+squirrelWindows:
+  iconUrl: https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/templates/icons/electron.ico
+  artifactName: ${name}-${version}-squirrel-setup.${ext}
+portable:
+  artifactName: ${name}-${version}-setup.${ext}
+npmRebuild: false
+publish:
+  provider: github
+  owner: barbecueIs
+  repo: barbs-snatcher
