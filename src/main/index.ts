@@ -406,6 +406,17 @@ app.whenReady().then(() => {
     StartHttpServer()
   }
 
+  ipcMain.handle('get-changelog', () => {
+    try {
+      const P = app.isPackaged
+        ? join(process.resourcesPath, 'changelog.json')
+        : join(__dirname, '../../resources/changelog.json')
+      return JSON.parse(fs.readFileSync(P, 'utf-8'))
+    } catch {
+      return []
+    }
+  })
+
   ipcMain.handle('load-config', () => LoadConfig())
   ipcMain.handle('save-config', (_E, Data: Config) => { SaveConfig(Data); return { ok: true } })
   ipcMain.handle('get-job-state', () => State)

@@ -488,10 +488,23 @@ interface InstallStatus {
   currentVersion: string
 }
 
+interface ChangelogEntry { version: string; date: string; notes: string[] }
+
+function SemVerGt(A: string, B: string): boolean {
+  const Pa = A.split('.').map(Number)
+  const Pb = B.split('.').map(Number)
+  for (let I = 0; I < 3; I++) {
+    if ((Pa[I] ?? 0) > (Pb[I] ?? 0)) return true
+    if ((Pa[I] ?? 0) < (Pb[I] ?? 0)) return false
+  }
+  return false
+}
+
 function InstallerPage() {
   const [InstallPath, SetInstallPath] = useState('')
   const [SourcePath, SetSourcePath] = useState('')
   const [Status, SetStatus] = useState<InstallStatus | null>(null)
+  const [Changelog, SetChangelog] = useState<ChangelogEntry[]>([])
   const [Progress, SetProgress] = useState(0)
   const [StatusText, SetStatusText] = useState('')
   const [OpenAfter, SetOpenAfter] = useState(true)
@@ -508,6 +521,7 @@ function InstallerPage() {
     const DefaultPath = `C:\\Users\\${window.process?.env?.USERNAME || 'Bar2D2'}\\AppData\\Local\\barbs-snatcher`
     SetInstallPath(DefaultPath)
     RefreshStatus(DefaultPath)
+    window.api.getChangelog().then(SetChangelog)
   }, [RefreshStatus])
 
   const HandleBrowseInstallDir = async () => {
@@ -703,6 +717,36 @@ function InstallerPage() {
                   )}
                 </div>
               )}
+
+              {(() => {
+                const Installed = Status?.installedVersion ?? ''
+                const Current = Status?.currentVersion ?? ''
+                const Entries = Changelog.filter((E) =>
+                  Installed ? SemVerGt(E.version, Installed) && !SemVerGt(E.version, Current) : E.version === Current
+                )
+                if (Entries.length === 0) return null
+                const IsUpdate = !!(Installed && SemVerGt(Current, Installed))
+                return (
+                  <div className="flex flex-col gap-3 border-2 border-primary/25 bg-primary/5 p-4">
+                    <p className="font-mono text-[9px] uppercase tracking-widest text-primary font-bold">
+                      {IsUpdate ? `What's new since v${Installed}` : `What's in v${Current}`}
+                    </p>
+                    {Entries.map((Entry) => (
+                      <div key={Entry.version} className="flex flex-col gap-1.5">
+                        {Entries.length > 1 && (
+                          <p className="font-mono text-[9px] text-primary/50 uppercase tracking-widest">v{Entry.version} — {Entry.date}</p>
+                        )}
+                        {Entry.notes.map((Note, I) => (
+                          <div key={I} className="flex items-start gap-2">
+                            <span className="text-primary shrink-0 font-mono text-[9px] mt-px">+</span>
+                            <span className="font-mono text-[9px] text-muted-foreground">{Note}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
 
               <div className="flex flex-col gap-2 font-mono text-xs border-2 border-border bg-black/30 p-4">
                 <label className="flex items-center gap-2 cursor-pointer select-none">

@@ -7,8 +7,9 @@ declare global {
       minimize: () => void
       maximize: () => void
       close: () => void
-      loadConfig: () => Promise<{ cookie: string; apiKey: string; placeId: string; downloadPath: string }>
-      saveConfig: (data: { cookie: string; apiKey: string; placeId: string; downloadPath: string }) => Promise<{ ok: boolean }>
+      getChangelog: () => Promise<{ version: string; date: string; notes: string[] }[]>
+      loadConfig: () => Promise<{ cookie: string; apiKey: string; downloadPath: string }>
+      saveConfig: (data: { cookie: string; apiKey: string; downloadPath: string }) => Promise<{ ok: boolean }>
       getJobState: () => Promise<JobState>
       getServerPort: () => Promise<number>
       getDownloadsPath: () => Promise<string>

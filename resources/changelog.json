@@ -1,0 +1,22 @@
+[
+  {
+    "version": "1.0.1",
+    "date": "2026-05-26",
+    "notes": [
+      "Fixed CDN failures when scanning folders with many sounds in subdirectories",
+      "Removed place ID field from app settings — managed by the plugin now",
+      "Scanning is now instant (removed sequential marketplace API calls)",
+      "Reduced download concurrency to avoid Roblox CDN rate limits"
+    ]
+  },
+  {
+    "version": "1.0.0",
+    "date": "2026-05-26",
+    "notes": [
+      "Initial release",
+      "Sound asset download and re-upload via Roblox Open Cloud",
+      "Roblox Studio plugin with place ID config, mouse lock, and fast parallel downloads",
+      "Session output log with per-sound status and failure breakdown"
+    ]
+  }
+]

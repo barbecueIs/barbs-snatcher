@@ -6,6 +6,7 @@ const Api = {
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
 
+  getChangelog: () => ipcRenderer.invoke('get-changelog'),
   loadConfig: () => ipcRenderer.invoke('load-config'),
   saveConfig: (Data: unknown) => ipcRenderer.invoke('save-config', Data),
 
