@@ -297,7 +297,7 @@ function UI.RefreshToggle(Row)
 	local Bg = Row:WaitForChild("ToggleBg")
 	local Dot = Bg:WaitForChild("Dot")
 	TweenService:Create(Dot, QUICK, {
-		Position = Active and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6),
+		Position = Active and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8),
 		BackgroundColor3 = Active and ACCENT_COLOR or MUTED_COLOR,
 	}):Play()
 	TweenService:Create(Bg, QUICK, {
