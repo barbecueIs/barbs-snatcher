@@ -496,7 +496,13 @@ app.whenReady().then(() => {
         }
       } else {
         const CurrentDir = dirname(process.execPath)
-        CopyFolderSync(CurrentDir, Dest)
+        const OriginalNoAsar = process.noAsar
+        process.noAsar = true
+        try {
+          CopyFolderSync(CurrentDir, Dest)
+        } finally {
+          process.noAsar = OriginalNoAsar
+        }
       }
 
       fs.writeFileSync(join(Dest, 'version.json'), JSON.stringify({ version: app.getVersion() }))
