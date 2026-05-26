@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import FormData from 'form-data'
 
 const ALL_EXTS = ['ogg', 'mp3', 'm4a', 'flac', 'wav']
 const MAX_RETRIES = 3
@@ -270,17 +271,19 @@ export async function UploadSound(
     })
 
     const Form = new FormData()
-    Form.append('request', new Blob([ReqJson], { type: 'application/json' }))
-    Form.append(
-      'fileContent',
-      new Blob([FileData], { type: MimeType }),
-      `sound_${OldId}.${Ext}`
-    )
+    Form.append('request', ReqJson, { contentType: 'application/json' })
+    Form.append('fileContent', fs.createReadStream(FilePath), {
+      filename: `sound_${OldId}.${Ext}`,
+      contentType: MimeType,
+    })
 
     const Res = await fetch('https://apis.roblox.com/assets/v1/assets', {
       method: 'POST',
-      headers: { 'x-api-key': ApiKey },
-      body: Form,
+      headers: {
+        'x-api-key': ApiKey,
+        ...Form.getHeaders(),
+      },
+      body: Form as any,
       signal: AbortSignal.timeout(30000)
     })
 
@@ -297,7 +300,7 @@ export async function UploadSound(
     if (!PollResult.NewId) return { Ok: false, NewId: null, Error: PollResult.Error }
 
     return { Ok: true, NewId: PollResult.NewId, Error: null }
-  } catch (E: unknown) {
-    return { Ok: false, NewId: null, Error: E instanceof Error ? E.message : 'unknown error' }
+  } catch (Err: unknown) {
+    return { Ok: false, NewId: null, Error: Err instanceof Error ? Err.message : 'unknown error' }
   }
 }
