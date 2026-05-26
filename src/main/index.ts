@@ -237,7 +237,7 @@ function StartHttpServer(): void {
 }
 
 const IsInstaller =
-  (process.env.PORTABLE_EXECUTABLE_PATH && process.env.PORTABLE_EXECUTABLE_PATH.toLowerCase().includes('setup')) ||
+  process.env.PORTABLE_EXECUTABLE_DIR !== undefined ||
   app.getPath('exe').toLowerCase().includes('setup') ||
   process.argv.includes('--installer')
 
@@ -509,7 +509,11 @@ app.whenReady().then(() => {
       }
 
       if (Args.openAfter) {
-        spawn(ExePath, [], { detached: true, stdio: 'ignore' }).unref()
+        const Env = { ...process.env }
+        delete Env.PORTABLE_EXECUTABLE_PATH
+        delete Env.PORTABLE_EXECUTABLE_DIR
+        delete Env.PORTABLE_EXECUTABLE_APP_FILENAME
+        spawn(ExePath, [], { detached: true, stdio: 'ignore', env: Env }).unref()
       }
 
       return { ok: true }
@@ -522,7 +526,11 @@ app.whenReady().then(() => {
     const Dest = TargetPath || GetDefaultInstallDir()
     const ExePath = join(Dest, 'barbs-snatcher.exe')
     if (fs.existsSync(ExePath)) {
-      spawn(ExePath, [], { detached: true, stdio: 'ignore' }).unref()
+      const Env = { ...process.env }
+      delete Env.PORTABLE_EXECUTABLE_PATH
+      delete Env.PORTABLE_EXECUTABLE_DIR
+      delete Env.PORTABLE_EXECUTABLE_APP_FILENAME
+      spawn(ExePath, [], { detached: true, stdio: 'ignore', env: Env }).unref()
       app.quit()
       return { ok: true }
     }
