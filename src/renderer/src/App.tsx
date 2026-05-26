@@ -845,6 +845,75 @@ function InstallerPage() {
   )
 }
 
+function OutputView() {
+  const [JobState, SetJobState] = useState<JobState>({
+    status: 'idle',
+    total: 0,
+    done: 0,
+    ok: 0,
+    failed: 0,
+    mapping: {},
+    error: null,
+    failReasons: {},
+    sessionDir: null,
+    sessionName: null,
+    outputs: [],
+  })
+
+  useEffect(() => {
+    window.api.getJobState().then((S) => SetJobState(S as JobState))
+    window.api.onJobUpdate((S) => SetJobState(S as JobState))
+    return () => window.api.removeListeners()
+  }, [])
+
+  return (
+    <motion.div variants={cVar} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-8 w-full max-w-5xl mx-auto h-[calc(100vh-8rem)]">
+      <motion.div variants={iVar} className="border-l-4 border-primary pl-6 py-2 flex justify-between items-end">
+        <div>
+          <h2 className="text-4xl font-display font-bold uppercase tracking-tight text-white">Download Output</h2>
+          <p className="text-muted-foreground mt-2 font-mono text-sm">REAL-TIME SNATCHER OUTPUT AND ERRORS.</p>
+        </div>
+        {JobState.sessionName ? (
+          <span className="font-mono text-xs text-primary uppercase tracking-widest border-2 border-primary/20 bg-primary/5 px-3 py-1">
+            {JobState.sessionName}
+          </span>
+        ) : null}
+      </motion.div>
+
+      <motion.div variants={iVar} className="flex-1 min-h-0 border-2 border-border bg-card flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-6 font-mono text-xs text-foreground select-text selection:bg-primary selection:text-primary-foreground space-y-2 scrollbar-thin">
+          {JobState.outputs && JobState.outputs.length > 0 ? (
+            JobState.outputs.map((O) => {
+              let StatusColor = 'text-muted-foreground'
+              if (O.status === 'Success') {
+                StatusColor = 'text-primary'
+              } else if (O.status.includes('[download]') || O.status.includes('[upload]')) {
+                StatusColor = 'text-destructive'
+              } else if (O.status === 'Downloading...' || O.status === 'Uploading...') {
+                StatusColor = 'text-yellow-400 font-bold'
+              }
+
+              return (
+                <div key={O.index} className="flex items-start py-1.5 border-b border-border/30 hover:bg-white/5 px-2 transition-colors">
+                  <span className="text-muted-foreground/60 w-10 shrink-0">[{O.index}]</span>
+                  <span className="font-bold text-white shrink-0 w-48">{O.oldId} : {O.newId}</span>
+                  <span className="shrink-0 text-muted-foreground/45 px-2 font-bold font-sans">|</span>
+                  <span className={`flex-1 break-all ${StatusColor}`}>{O.status}</span>
+                </div>
+              )
+            })
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
+              <Terminal size={24} className="opacity-40 animate-pulse text-primary" />
+              <p className="uppercase tracking-widest text-[10px]">No active session output available.</p>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 export default function App() {
   if (IsInstallerMode) {
     return <InstallerPage />
@@ -918,6 +987,7 @@ export default function App() {
         <div className="flex-1 overflow-auto py-6">
           <nav className="flex flex-col gap-1">
             <SidebarItem icon={LayoutDashboard} label="Menu" active={View === 'menu'} onClick={() => SetView('menu')} />
+            <SidebarItem icon={Terminal} label="Output" active={View === 'output'} onClick={() => SetView('output')} />
             <SidebarItem icon={Settings} label="Settings" active={View === 'settings'} onClick={() => SetView('settings')} />
             <SidebarItem icon={Star} label="Credits" active={View === 'credits'} onClick={() => SetView('credits')} />
           </nav>
@@ -953,6 +1023,9 @@ export default function App() {
           <AnimatePresence mode="wait">
             {View === 'menu' && (
               <MenuView key="menu" config={Config} serverStatus={ServerStatus} />
+            )}
+            {View === 'output' && (
+              <OutputView key="output" />
             )}
             {View === 'settings' && (
               <SettingsView key="settings" config={Config} onSave={HandleSaveConfig} />

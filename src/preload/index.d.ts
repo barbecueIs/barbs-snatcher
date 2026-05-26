@@ -24,6 +24,13 @@ declare global {
     }
   }
 
+  interface OutputEntry {
+    index: number
+    oldId: string
+    newId: string
+    status: string
+  }
+
   interface JobState {
     status: 'idle' | 'processing' | 'complete' | 'error'
     total: number
@@ -35,5 +42,6 @@ declare global {
     failReasons: Record<string, number>
     sessionDir: string | null
     sessionName: string | null
+    outputs: OutputEntry[]
   }
 }

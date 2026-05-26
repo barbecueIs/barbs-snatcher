@@ -206,6 +206,7 @@ end
 
 local function ScanForSounds(Instances)
 	local Ids = {}
+	local Names = {}
 	local Seen = {}
 	local DoScripts = RowScripts:GetAttribute("Value")
 	local DoIntValues = RowIntValues:GetAttribute("Value")
@@ -217,6 +218,7 @@ local function ScanForSounds(Instances)
 			if Id and not Seen[Id] then
 				Seen[Id] = true
 				table.insert(Ids, Id)
+				Names[Id] = Inst.Name
 			end
 		end
 
@@ -227,6 +229,7 @@ local function ScanForSounds(Instances)
 					if not Seen[MatchedId] then
 						Seen[MatchedId] = true
 						table.insert(Ids, MatchedId)
+						Names[MatchedId] = Inst.Name
 					end
 				end
 			end
@@ -237,6 +240,7 @@ local function ScanForSounds(Instances)
 			if not Seen[Id] then
 				Seen[Id] = true
 				table.insert(Ids, Id)
+				Names[Id] = Inst.Name
 			end
 		end
 
@@ -245,11 +249,12 @@ local function ScanForSounds(Instances)
 				if not Seen[MatchedId] then
 					Seen[MatchedId] = true
 					table.insert(Ids, MatchedId)
+					Names[MatchedId] = Inst.Name
 				end
 			end
 		end
 	end
-	return Ids
+	return Ids, Names
 end
 
 local function PatchInstances(Instances, Mapping)
@@ -310,7 +315,7 @@ end
 local function RunProcess(ScopeMode)
 	SetStatus("SCANNING...")
 	local Instances = GetInstances(ScopeMode)
-	local Ids = ScanForSounds(Instances)
+	local Ids, Names = ScanForSounds(Instances)
 
 	if #Ids == 0 then
 		SetStatus("NO SOUNDS FOUND")
@@ -319,7 +324,7 @@ local function RunProcess(ScopeMode)
 
 	SetStatus("FOUND " .. #Ids .. " IDS — CONNECTING...")
 
-	local Payload = HttpService:JSONEncode({ ids = Ids, placeId = game.PlaceId })
+	local Payload = HttpService:JSONEncode({ ids = Ids, names = Names, placeId = game.PlaceId })
 	local PostOk = pcall(function()
 		return HttpService:PostAsync(HOST .. "/sounds-process", Payload, Enum.HttpContentType.ApplicationJson)
 	end)

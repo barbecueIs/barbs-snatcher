@@ -30,7 +30,7 @@ function IsValidAudio(Buf: Buffer): boolean {
   return false
 }
 
-function SanitizeName(Raw: string): string {
+export function SanitizeName(Raw: string): string {
   const Clean = Raw
     .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
     .replace(/\s+/g, '_')
@@ -134,10 +134,15 @@ export async function DownloadSound(
   Cookie: string,
   CsrfToken: string,
   ApiKey: string,
-  PlaceId: string
+  PlaceId: string,
+  FileName: string
 ): Promise<{ Ok: boolean; FilePath: string | null; Error: string | null }> {
-  const Existing = FindExistingFile(Dir, Id)
-  if (Existing) return { Ok: true, FilePath: Existing, Error: null }
+  for (const Ext of ALL_EXTS) {
+    const P = path.join(Dir, `${FileName}.${Ext}`)
+    if (fs.existsSync(P)) {
+      return { Ok: true, FilePath: P, Error: null }
+    }
+  }
 
   const CdnHeaders = BuildCdnHeaders(Cookie, CsrfToken, PlaceId)
 
@@ -196,8 +201,7 @@ export async function DownloadSound(
 
     if (AudioBuf) {
       const Ext = DetectExt(AudioBuf)
-      const AssetName = await FetchAssetName(Id, CdnHeaders['User-Agent'] ?? 'Roblox/WinInet')
-      const FilePath = path.join(Dir, `${AssetName}.${Ext}`)
+      const FilePath = path.join(Dir, `${FileName}.${Ext}`)
       fs.writeFileSync(FilePath, AudioBuf)
       return { Ok: true, FilePath, Error: null }
     }

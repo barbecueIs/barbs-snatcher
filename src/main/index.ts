@@ -9,13 +9,20 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
 app.commandLine.appendSwitch('no-sandbox')
 import Icon from '../../resources/icon.png?asset'
-import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound } from './downloader'
+import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound, SanitizeName } from './downloader'
 
 interface Config {
   cookie: string
   apiKey: string
   placeId: string
   downloadPath: string
+}
+
+interface OutputEntry {
+  index: number
+  oldId: string
+  newId: string
+  status: string
 }
 
 interface JobState {
@@ -29,6 +36,7 @@ interface JobState {
   failReasons: Record<string, number>
   sessionDir: string | null
   sessionName: string | null
+  outputs: OutputEntry[]
 }
 
 let MainWindow: BrowserWindow | null = null
@@ -46,6 +54,7 @@ let State: JobState = {
   failReasons: {},
   sessionDir: null,
   sessionName: null,
+  outputs: [],
 }
 
 const ConfigPath = (): string => join(app.getPath('userData'), 'bsnatcher.json')
@@ -99,7 +108,7 @@ function SetState(Patch: Partial<JobState>): void {
   MainWindow?.webContents.send('job-update', State)
 }
 
-async function RunJob(Ids: string[]): Promise<void> {
+async function RunJob(Ids: string[], Names: Record<string, string>): Promise<void> {
   const Cfg = LoadConfig()
   if (!Cfg.apiKey) {
     SetState({ status: 'error', error: 'No API key set. Go to Settings and add your Open Cloud API key.' })
@@ -113,6 +122,13 @@ async function RunJob(Ids: string[]): Promise<void> {
   const SessionDir = CreateSessionDir(Cfg.downloadPath || DefaultDownloadsBase())
   const SessionName = basename(SessionDir)
 
+  const Outputs: OutputEntry[] = Ids.map((Id, Index) => ({
+    index: Index + 1,
+    oldId: Id,
+    newId: 'Pending',
+    status: 'Waiting...',
+  }))
+
   SetState({
     status: 'processing',
     total: Ids.length,
@@ -124,6 +140,7 @@ async function RunJob(Ids: string[]): Promise<void> {
     failReasons: {},
     sessionDir: SessionDir,
     sessionName: SessionName,
+    outputs: Outputs,
   })
 
   const CsrfToken = await FetchCsrfToken(Cfg.cookie)
@@ -150,15 +167,28 @@ async function RunJob(Ids: string[]): Promise<void> {
       const Id = Queue.shift()
       if (!Id) break
 
-      const DlResult = await DownloadSound(Id, SessionDir, Cfg.cookie, CsrfToken, Cfg.apiKey, Cfg.placeId)
+      const Index = Ids.indexOf(Id)
+      const Entry = Outputs[Index]
+      Entry.status = 'Downloading...'
+      SetState({ outputs: [...Outputs] })
+
+      const SoundName = SanitizeName(Names[Id] || 'Sound')
+      const CleanName = `${Entry.index}_${SoundName}`
+
+      const DlResult = await DownloadSound(Id, SessionDir, Cfg.cookie, CsrfToken, Cfg.apiKey, Cfg.placeId, CleanName)
 
       if (!DlResult.Ok || !DlResult.FilePath) {
         Done++
         Failed++
         BumpReason(`[download] ${DlResult.Error}`)
-        SetState({ done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons } })
+        Entry.newId = 'Failed'
+        Entry.status = `[download] ${DlResult.Error}`
+        SetState({ done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
         continue
       }
+
+      Entry.status = 'Uploading...'
+      SetState({ outputs: [...Outputs] })
 
       const UlResult = await UploadSound(DlResult.FilePath, Id, Cfg.apiKey, UserId)
 
@@ -166,11 +196,15 @@ async function RunJob(Ids: string[]): Promise<void> {
       if (UlResult.Ok && UlResult.NewId) {
         Ok++
         Mapping[Id] = UlResult.NewId
+        Entry.newId = UlResult.NewId
+        Entry.status = 'Success'
       } else {
         Failed++
         BumpReason(`[upload] ${UlResult.Error}`)
+        Entry.newId = 'Failed'
+        Entry.status = `[upload] ${UlResult.Error}`
       }
-      SetState({ done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons } })
+      SetState({ done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
     }
   }
 
@@ -178,9 +212,9 @@ async function RunJob(Ids: string[]): Promise<void> {
 
   try {
     fs.writeFileSync(join(SessionDir, 'mapping.json'), JSON.stringify(Mapping, null, 2))
-  } catch { /* non-fatal */ }
+  } catch {}
 
-  SetState({ status: 'complete', done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons } })
+  SetState({ status: 'complete', done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
 }
 
 function HandleRequest(Req: http.IncomingMessage, Res: http.ServerResponse): void {
@@ -198,7 +232,7 @@ function HandleRequest(Req: http.IncomingMessage, Res: http.ServerResponse): voi
     Req.on('data', (Chunk) => { Body += Chunk })
     Req.on('end', () => {
       try {
-        const Data = JSON.parse(Body) as { ids?: string[]; placeId?: string }
+        const Data = JSON.parse(Body) as { ids?: string[]; names?: Record<string, string>; placeId?: string }
         const Ids = (Data.ids ?? []).filter((Id) => /^\d+$/.test(Id))
         if (Ids.length === 0) {
           Res.writeHead(400)
@@ -207,7 +241,7 @@ function HandleRequest(Req: http.IncomingMessage, Res: http.ServerResponse): voi
         }
         Res.writeHead(200)
         Res.end(JSON.stringify({ ok: true, count: Ids.length }))
-        RunJob(Ids)
+        RunJob(Ids, Data.names ?? {})
       } catch {
         Res.writeHead(400)
         Res.end(JSON.stringify({ error: 'invalid JSON' }))
