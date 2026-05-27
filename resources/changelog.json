@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.0.2",
+    "date": "2026-05-27",
+    "notes": [
+      "Uploads now automatically target the group when the game is group-owned and the user has upload permissions",
+      "No configuration required — creator type and ID are detected from the active place at scan time"
+    ]
+  },
+  {
     "version": "1.0.1",
     "date": "2026-05-26",
     "notes": [

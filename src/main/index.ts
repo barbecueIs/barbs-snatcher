@@ -106,7 +106,7 @@ function SetState(Patch: Partial<JobState>): void {
   MainWindow?.webContents.send('job-update', State)
 }
 
-async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: string[]): Promise<void> {
+async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: string[], CreatorType: string, CreatorId: number): Promise<void> {
   const Cfg = LoadConfig()
   if (!Cfg.apiKey) {
     SetState({ status: 'error', error: 'No API key set. Go to Settings and add your Open Cloud API key.' })
@@ -189,7 +189,7 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
       Entry.status = 'Uploading...'
       SetState({ outputs: [...Outputs] })
 
-      const UlResult = await UploadSound(DlResult.FilePath, Id, Cfg.apiKey, UserId)
+      const UlResult = await UploadSound(DlResult.FilePath, Id, Cfg.apiKey, UserId, CreatorType, CreatorId)
 
       Done++
       if (UlResult.Ok && UlResult.NewId) {
@@ -231,7 +231,7 @@ function HandleRequest(Req: http.IncomingMessage, Res: http.ServerResponse): voi
     Req.on('data', (Chunk) => { Body += Chunk })
     Req.on('end', () => {
       try {
-        const Data = JSON.parse(Body) as { ids?: string[]; names?: Record<string, string>; placeIds?: string[] }
+        const Data = JSON.parse(Body) as { ids?: string[]; names?: Record<string, string>; placeIds?: string[]; creatorType?: string; creatorId?: number }
         const Ids = (Data.ids ?? []).filter((Id) => /^\d+$/.test(Id))
         if (Ids.length === 0) {
           Res.writeHead(400)
@@ -240,7 +240,7 @@ function HandleRequest(Req: http.IncomingMessage, Res: http.ServerResponse): voi
         }
         Res.writeHead(200)
         Res.end(JSON.stringify({ ok: true, count: Ids.length }))
-        RunJob(Ids, Data.names ?? {}, Data.placeIds ?? [])
+        RunJob(Ids, Data.names ?? {}, Data.placeIds ?? [], Data.creatorType ?? 'User', Data.creatorId ?? 0)
       } catch {
         Res.writeHead(400)
         Res.end(JSON.stringify({ error: 'invalid JSON' }))

@@ -237,18 +237,24 @@ export async function UploadSound(
   FilePath: string,
   OldId: string,
   ApiKey: string,
-  UserId: number
+  UserId: number,
+  CreatorType: string,
+  CreatorId: number
 ): Promise<{ Ok: boolean; NewId: string | null; Error: string | null }> {
   try {
     const FileData = fs.readFileSync(FilePath)
     const Ext = path.extname(FilePath).slice(1).toLowerCase()
     const MimeType = MIME_MAP[Ext] ?? 'audio/mpeg'
 
+    const Creator = CreatorType === 'Group' && CreatorId > 0
+      ? { groupId: CreatorId }
+      : { userId: UserId }
+
     const ReqJson = JSON.stringify({
       assetType: 'Audio',
       displayName: `sound_${OldId}`,
       description: '',
-      creationContext: { creator: { userId: UserId } },
+      creationContext: { creator: Creator },
     })
 
     const Form = new FormData()
