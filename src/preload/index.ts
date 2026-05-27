@@ -7,6 +7,7 @@ const Api = {
   close: () => ipcRenderer.send('window-close'),
 
   getChangelog: () => ipcRenderer.invoke('get-changelog'),
+  checkLatestRelease: () => ipcRenderer.invoke('check-latest-release'),
   loadConfig: () => ipcRenderer.invoke('load-config'),
   saveConfig: (Data: unknown) => ipcRenderer.invoke('save-config', Data),
 

@@ -505,6 +505,7 @@ function InstallerPage() {
   const [SourcePath, SetSourcePath] = useState('')
   const [Status, SetStatus] = useState<InstallStatus | null>(null)
   const [Changelog, SetChangelog] = useState<ChangelogEntry[]>([])
+  const [LatestRelease, SetLatestRelease] = useState<{ version: string | null; downloadUrl: string | null } | null>(null)
   const [Progress, SetProgress] = useState(0)
   const [StatusText, SetStatusText] = useState('')
   const [OpenAfter, SetOpenAfter] = useState(true)
@@ -522,6 +523,12 @@ function InstallerPage() {
     SetInstallPath(DefaultPath)
     RefreshStatus(DefaultPath)
     window.api.getChangelog().then(SetChangelog)
+    window.api.checkLatestRelease().then((Release) => {
+      SetLatestRelease(Release)
+      if (Release?.downloadUrl) {
+        SetSourcePath((Prev) => Prev || Release.downloadUrl || '')
+      }
+    })
   }, [RefreshStatus])
 
   const HandleBrowseInstallDir = async () => {
@@ -629,7 +636,10 @@ function InstallerPage() {
           </div>
           {Status ? (
             <div className="font-mono text-[10px] text-muted-foreground text-right">
-              <div>Installer v{Status.currentVersion}</div>
+              <div>Launcher v{Status.currentVersion}</div>
+              {LatestRelease?.version && SemVerGt(LatestRelease.version, Status.currentVersion) && (
+                <div className="text-primary">Latest v{LatestRelease.version}</div>
+              )}
               {Status.installed && <div>Installed v{Status.installedVersion || 'unknown'}</div>}
             </div>
           ) : null}
@@ -700,13 +710,17 @@ function InstallerPage() {
                       <Info size={16} className="shrink-0 mt-0.5" />
                       <div>
                         Barb&apos;s Snatcher is already installed in this directory (v{Status.installedVersion || 'unknown'}).
-                        {Status.installedVersion && Status.installedVersion !== Status.currentVersion && (
-                          <span className="block mt-1 font-bold text-white">
-                            {Status.installedVersion < Status.currentVersion
-                              ? `An update is available (v${Status.installedVersion} -> v${Status.currentVersion}).`
-                              : `Installed version is newer than installer version (v${Status.installedVersion} > v${Status.currentVersion}).`}
-                          </span>
-                        )}
+                        {(() => {
+                          const InstalledV = Status.installedVersion || '0.0.0'
+                          const GithubV = LatestRelease?.version
+                          if (GithubV && SemVerGt(GithubV, InstalledV)) {
+                            return <span className="block mt-1 font-bold text-white">An update is available (v{InstalledV} → v{GithubV}).</span>
+                          }
+                          if (!GithubV && SemVerGt(Status.currentVersion, InstalledV)) {
+                            return <span className="block mt-1 font-bold text-white">An update is available (v{InstalledV} → v{Status.currentVersion}).</span>
+                          }
+                          return null
+                        })()}
                       </div>
                     </div>
                   ) : (
@@ -829,15 +843,19 @@ function InstallerPage() {
                   <CyberButton onClick={HandleLaunch} className="border-primary text-primary bg-primary/10">
                     Launch
                   </CyberButton>
-                  {Status.installedVersion && Status.installedVersion < Status.currentVersion ? (
-                    <CyberButton onClick={() => RunInstallation('update')}>
-                      Update
-                    </CyberButton>
-                  ) : (
-                    <CyberButton onClick={() => RunInstallation('reinstall')}>
-                      Reinstall
-                    </CyberButton>
-                  )}
+                  {(() => {
+                    const InstalledV = Status.installedVersion || '0.0.0'
+                    const GithubV = LatestRelease?.version
+                    const HasUpdate = GithubV
+                      ? SemVerGt(GithubV, InstalledV)
+                      : SemVerGt(Status.currentVersion, InstalledV)
+                    const UpdateLabel = GithubV && HasUpdate ? `Update to v${GithubV}` : 'Update'
+                    return HasUpdate ? (
+                      <CyberButton onClick={() => RunInstallation('update')}>{UpdateLabel}</CyberButton>
+                    ) : (
+                      <CyberButton onClick={() => RunInstallation('reinstall')}>Reinstall</CyberButton>
+                    )
+                  })()}
                 </>
               ) : (
                 <CyberButton onClick={() => RunInstallation('install')}>

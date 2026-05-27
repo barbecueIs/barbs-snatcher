@@ -417,6 +417,22 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('check-latest-release', async () => {
+    try {
+      const Res = await fetch('https://api.github.com/repos/barbecueIs/barbs-snatcher/releases/latest', {
+        headers: { 'User-Agent': 'barbs-snatcher-launcher', Accept: 'application/vnd.github+json' },
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!Res.ok) return null
+      const Body = await Res.json() as { tag_name?: string; assets?: { name?: string; browser_download_url?: string }[] }
+      const Version = (Body.tag_name ?? '').replace(/^v/, '') || null
+      const Asset = (Body.assets ?? []).find((A) => A.name?.endsWith('-setup.exe'))
+      return { version: Version, downloadUrl: Asset?.browser_download_url ?? null }
+    } catch {
+      return null
+    }
+  })
+
   ipcMain.handle('load-config', () => LoadConfig())
   ipcMain.handle('save-config', (_E, Data: Config) => { SaveConfig(Data); return { ok: true } })
   ipcMain.handle('get-job-state', () => State)

@@ -8,6 +8,7 @@ declare global {
       maximize: () => void
       close: () => void
       getChangelog: () => Promise<{ version: string; date: string; notes: string[] }[]>
+      checkLatestRelease: () => Promise<{ version: string | null; downloadUrl: string | null } | null>
       loadConfig: () => Promise<{ cookie: string; apiKey: string; downloadPath: string }>
       saveConfig: (data: { cookie: string; apiKey: string; downloadPath: string }) => Promise<{ ok: boolean }>
       getJobState: () => Promise<JobState>
