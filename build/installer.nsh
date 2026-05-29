@@ -12,6 +12,7 @@
 !macroend
 
 !macro customInstall
-  CreateShortcut "$DESKTOP\Barb's Launcher.lnk" "$INSTDIR\barbs-snatcher.exe" "--installer"
+  CreateShortcut "$DESKTOP\Barb's Snatcher.lnk" "$INSTDIR\barbs-snatcher.exe" "--installer"
+  CreateShortcut "$SMPROGRAMS\Barb's Snatcher.lnk" "$INSTDIR\barbs-snatcher.exe" "--installer"
   ExecShell "" "$INSTDIR\barbs-snatcher.exe" "--installer"
 !macroend

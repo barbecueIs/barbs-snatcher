@@ -448,6 +448,7 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('get-app-version', () => app.getVersion())
+  ipcMain.handle('get-default-install-dir', () => GetDefaultInstallDir())
   ipcMain.handle('load-config', () => LoadConfig())
   ipcMain.handle('save-config', (_E, Data: Config) => { SaveConfig(Data); return { ok: true } })
   ipcMain.handle('get-job-state', () => State)

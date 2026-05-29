@@ -510,68 +510,96 @@ function InstallerPage() {
   const [StatusText, SetStatusText] = useState('')
   const [OpenAfter, SetOpenAfter] = useState(true)
   const [CreateShortcut, SetCreateShortcut] = useState(true)
-  const [Screen, SetScreen] = useState<'welcome' | 'installing' | 'success' | 'error'>('welcome')
+  const [Screen, SetScreen] = useState<'checking' | 'update' | 'install' | 'installing' | 'done' | 'error'>('checking')
   const [ErrorMessage, SetErrorMessage] = useState('')
+  const [UpdateDownloading, SetUpdateDownloading] = useState(false)
+  const [UpdateProgress, SetUpdateProgress] = useState(0)
 
   const RefreshStatus = useCallback(async (Path: string) => {
     const Res = await window.api.checkInstallStatus(Path)
-    SetStatus(Res)
+    SetStatus(Res as InstallStatus)
+  }, [])
+
+  const Init = useCallback(async () => {
+    SetScreen('checking')
+    const DefaultPath = await window.api.getDefaultInstallDir() as string
+    SetInstallPath(DefaultPath)
+
+    const [StatusRes, ChangelogRes, ReleaseRes] = await Promise.all([
+      window.api.checkInstallStatus(DefaultPath),
+      window.api.getChangelog(),
+      Promise.race([
+        window.api.checkLatestRelease(),
+        new Promise<null>((Resolve) => setTimeout(() => Resolve(null), 3000)),
+      ]),
+    ])
+
+    const S = StatusRes as InstallStatus
+    const C = ChangelogRes as ChangelogEntry[]
+    const R = ReleaseRes as { version: string | null; downloadUrl: string | null } | null
+
+    SetStatus(S)
+    SetChangelog(C)
+    SetLatestRelease(R)
+
+    if (!S.installed || S.broken) {
+      SetScreen('install')
+      return
+    }
+
+    const InstalledV = S.installedVersion || '0.0.0'
+    const GithubV = R?.version
+    const HasUpdate = GithubV ? SemVerGt(GithubV, InstalledV) : SemVerGt(S.currentVersion, InstalledV)
+
+    if (HasUpdate) {
+      SetScreen('update')
+    } else {
+      const LaunchRes = await window.api.launchInstalledApp(DefaultPath) as { ok: boolean }
+      if (!LaunchRes.ok) SetScreen('install')
+    }
   }, [])
 
   useEffect(() => {
-    const DefaultPath = `C:\\Users\\${window.process?.env?.USERNAME || 'Bar2D2'}\\AppData\\Local\\barbs-snatcher`
-    SetInstallPath(DefaultPath)
-    RefreshStatus(DefaultPath)
-    window.api.getChangelog().then(SetChangelog)
-    window.api.checkLatestRelease().then((Release) => {
-      SetLatestRelease(Release)
-    })
-  }, [RefreshStatus])
+    window.api.onUpdateDownloadProgress((Pct) => SetUpdateProgress(Pct))
+    Init()
+    return () => window.api.removeListeners()
+  }, [Init])
 
   const HandleBrowseInstallDir = async () => {
     const Selected = await window.api.selectInstallDir()
     if (Selected) {
-      SetInstallPath(Selected)
-      RefreshStatus(Selected)
+      SetInstallPath(Selected as string)
+      RefreshStatus(Selected as string)
     }
   }
 
   const HandleBrowseSource = async () => {
     const Selected = await window.api.selectNupkgFile()
-    if (Selected) {
-      SetSourcePath(Selected)
-    }
+    if (Selected) SetSourcePath(Selected as string)
   }
 
   const RunInstallation = async (Action: 'install' | 'repair' | 'update' | 'reinstall') => {
     SetScreen('installing')
     SetProgress(10)
-    SetStatusText('Initializing...')
+    SetStatusText(
+      Action === 'repair' ? 'Repairing installation...' :
+      Action === 'update' ? 'Updating files...' :
+      'Installing files...'
+    )
 
     const Interval = setInterval(() => {
       SetProgress((Prev) => {
-        if (Prev >= 90) {
-          clearInterval(Interval)
-          return 90
-        }
+        if (Prev >= 90) { clearInterval(Interval); return 90 }
         return Prev + 10
       })
     }, 400)
-
-    if (Action === 'repair') {
-      SetStatusText('Repairing installation...')
-    } else if (Action === 'update') {
-      SetStatusText('Updating version...')
-    } else {
-      SetStatusText('Installing files...')
-    }
 
     const Result = await window.api.installApp({
       sourcePathOrUrl: SourcePath,
       targetPath: InstallPath,
       openAfter: OpenAfter,
       createShortcut: CreateShortcut,
-    })
+    }) as { ok: boolean; error?: string }
 
     clearInterval(Interval)
 
@@ -582,7 +610,7 @@ function InstallerPage() {
         if (OpenAfter) {
           window.api.close()
         } else {
-          SetScreen('success')
+          SetScreen('done')
         }
       }, 1000)
     } else {
@@ -591,12 +619,41 @@ function InstallerPage() {
     }
   }
 
-  const HandleLaunch = async () => {
-    await window.api.launchInstalledApp(InstallPath)
+  const HandleLaunch = () => {
+    window.api.launchInstalledApp(InstallPath)
   }
 
+  const HandleUpdate = async () => {
+    if (UpdateDownloading) return
+    const GithubV = LatestRelease?.version
+    const IsGithubUpdate = GithubV
+      ? SemVerGt(GithubV, Status?.currentVersion ?? '0.0.0') && !!LatestRelease?.downloadUrl
+      : false
+
+    if (IsGithubUpdate && LatestRelease?.downloadUrl) {
+      SetUpdateDownloading(true)
+      SetUpdateProgress(0)
+      const Result = await window.api.downloadAndLaunchUpdate(LatestRelease.downloadUrl) as { ok: boolean; error?: string }
+      if (!Result.ok) {
+        SetUpdateDownloading(false)
+        SetErrorMessage(Result.error || 'Download failed.')
+        SetScreen('error')
+      }
+    } else {
+      RunInstallation('update')
+    }
+  }
+
+  const InstalledV = Status?.installedVersion || '0.0.0'
+  const GithubV = LatestRelease?.version
+  const AvailableV = GithubV ?? Status?.currentVersion ?? ''
+  const IsGithubUpdate = GithubV ? SemVerGt(GithubV, Status?.currentVersion ?? '0.0.0') : false
+  const UpdateEntries = Changelog.filter(
+    (E) => SemVerGt(E.version, InstalledV) && (AvailableV ? !SemVerGt(E.version, AvailableV) : true)
+  )
+
   return (
-    <div className="h-screen w-full flex flex-col bg-background text-foreground overflow-hidden select-none relative p-8">
+    <div className="h-screen w-full flex flex-col bg-background text-foreground overflow-hidden select-none relative">
       <div className="noise-overlay" />
       <div className="absolute inset-0 bg-grid-pattern opacity-30 pointer-events-none" />
 
@@ -620,163 +677,150 @@ function InstallerPage() {
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col justify-between relative z-10 pt-4">
-        <header className="border-b-2 border-border pb-4 flex items-center justify-between">
+      <div className="flex-1 flex flex-col relative z-10 px-8 pb-8 pt-12">
+        <header className="border-b-2 border-border pb-4 mb-6 flex items-center justify-between shrink-0">
           <div>
             <div className="flex items-center gap-2 text-primary mb-1">
               <Terminal size={12} />
-              <span className="font-mono text-[9px] uppercase tracking-widest">setup.wizard</span>
+              <span className="font-mono text-[9px] uppercase tracking-widest">barb's launcher</span>
             </div>
             <h1 className="font-display font-black text-xl uppercase tracking-tighter text-white">
-              B-<span className="text-primary">Snatcher Setup</span>
+              B-<span className="text-primary">Snatcher</span>
             </h1>
           </div>
-          {Status ? (
-            <div className="font-mono text-[10px] text-muted-foreground text-right">
-              <div>Launcher v{Status.currentVersion}</div>
-              {LatestRelease?.version && SemVerGt(LatestRelease.version, Status.currentVersion) && (
-                <div className="text-primary">Latest v{LatestRelease.version}</div>
-              )}
-              {Status.installed && <div>Installed v{Status.installedVersion || 'unknown'}</div>}
+          {Status && (
+            <div className="font-mono text-[10px] text-muted-foreground text-right flex flex-col gap-0.5">
+              <span>Launcher v{Status.currentVersion}</span>
+              {Status.installed && <span>Installed v{Status.installedVersion || 'unknown'}</span>}
             </div>
-          ) : null}
+          )}
         </header>
 
-        <main className="flex-1 py-6 overflow-y-auto">
-          {Screen === 'welcome' && (
-            <div className="flex flex-col gap-5">
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-bold font-display uppercase tracking-widest text-primary flex items-center gap-2">
-                    <ChevronRight size={14} />
-                    Install Destination Directory
-                  </label>
-                  <div className="flex items-stretch gap-0">
-                    <input
-                      type="text"
-                      value={InstallPath}
-                      onChange={(E) => {
-                        SetInstallPath(E.target.value)
-                        RefreshStatus(E.target.value)
-                      }}
-                      className="flex-1 border-2 border-r-0 border-border bg-black/50 p-2 font-mono text-xs text-foreground outline-none focus:border-primary transition-colors"
-                    />
-                    <button
-                      onClick={HandleBrowseInstallDir}
-                      className="shrink-0 border-2 border-border bg-black/50 px-4 text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-all font-mono text-[10px] uppercase tracking-widest"
-                    >
-                      Browse
-                    </button>
-                  </div>
-                </div>
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {Screen === 'checking' && (
+            <div className="flex flex-col items-center justify-center h-full gap-4">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                className="w-6 h-6 border-2 border-primary border-t-transparent"
+              />
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Checking for updates...</span>
+            </div>
+          )}
 
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-bold font-display uppercase tracking-widest text-primary flex items-center gap-2">
-                    <ChevronRight size={14} />
-                    Download / nupkg Source (Optional)
-                  </label>
-                  <div className="flex items-stretch gap-0">
-                    <input
-                      type="text"
-                      placeholder="Enter URL or file path, or leave empty to use built-in files..."
-                      value={SourcePath}
-                      onChange={(E) => SetSourcePath(E.target.value)}
-                      className="flex-1 border-2 border-r-0 border-border bg-black/50 p-2 font-mono text-xs text-foreground placeholder:text-muted-foreground/30 outline-none focus:border-primary transition-colors"
-                    />
-                    <button
-                      onClick={HandleBrowseSource}
-                      className="shrink-0 border-2 border-border bg-black/50 px-4 text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-all font-mono text-[10px] uppercase tracking-widest"
-                    >
-                      Select File
-                    </button>
-                  </div>
+          {Screen === 'update' && (
+            <div className="flex flex-col gap-5">
+              <div className="border-2 border-primary/40 bg-primary/5 p-4 flex items-start gap-3">
+                <AlertTriangle size={16} className="text-primary shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-1">
+                  <span className="font-mono text-xs font-bold text-white uppercase tracking-wide">Update Available</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    v{InstalledV} → v{AvailableV}
+                    {IsGithubUpdate && <span className="text-primary/70"> · requires download</span>}
+                  </span>
                 </div>
               </div>
 
-              {Status && (
-                <div className="border-2 border-border bg-card p-4 flex flex-col gap-3">
-                  {Status.broken ? (
-                    <div className="flex items-start gap-2 text-destructive font-mono text-xs">
-                      <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-bold">WARNING:</span> Installation at this location is broken. Click Repair to fix it.
-                      </div>
+              {UpdateEntries.length > 0 && (
+                <div className="flex flex-col gap-3 border-2 border-border bg-black/30 p-4">
+                  <p className="font-mono text-[9px] uppercase tracking-widest text-primary font-bold">What's new</p>
+                  {UpdateEntries.map((Entry) => (
+                    <div key={Entry.version} className="flex flex-col gap-1.5">
+                      {UpdateEntries.length > 1 && (
+                        <p className="font-mono text-[9px] text-primary/50 uppercase tracking-widest">v{Entry.version} — {Entry.date}</p>
+                      )}
+                      {Entry.notes.map((Note, I) => (
+                        <div key={I} className="flex items-start gap-2">
+                          <span className="text-primary shrink-0 font-mono text-[9px] mt-px">+</span>
+                          <span className="font-mono text-[9px] text-muted-foreground">{Note}</span>
+                        </div>
+                      ))}
                     </div>
-                  ) : Status.installed ? (
-                    <div className="flex items-start gap-2 text-primary font-mono text-xs">
-                      <Info size={16} className="shrink-0 mt-0.5" />
-                      <div>
-                        Barb&apos;s Snatcher is already installed in this directory (v{Status.installedVersion || 'unknown'}).
-                        {(() => {
-                          const InstalledV = Status.installedVersion || '0.0.0'
-                          const GithubV = LatestRelease?.version
-                          if (GithubV && SemVerGt(GithubV, InstalledV)) {
-                            return <span className="block mt-1 font-bold text-white">An update is available (v{InstalledV} → v{GithubV}).</span>
-                          }
-                          if (!GithubV && SemVerGt(Status.currentVersion, InstalledV)) {
-                            return <span className="block mt-1 font-bold text-white">An update is available (v{InstalledV} → v{Status.currentVersion}).</span>
-                          }
-                          return null
-                        })()}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-start gap-2 text-muted-foreground font-mono text-xs">
-                      <Info size={16} className="shrink-0 mt-0.5" />
-                      <div>Ready to perform a clean installation of Barb&apos;s Snatcher v{Status.currentVersion}.</div>
-                    </div>
-                  )}
+                  ))}
                 </div>
               )}
 
-              {(() => {
-                const Installed = Status?.installedVersion ?? ''
-                const Current = Status?.currentVersion ?? ''
-                const Entries = Changelog.filter((E) =>
-                  Installed ? SemVerGt(E.version, Installed) && !SemVerGt(E.version, Current) : E.version === Current
-                )
-                if (Entries.length === 0) return null
-                const IsUpdate = !!(Installed && SemVerGt(Current, Installed))
-                return (
-                  <div className="flex flex-col gap-3 border-2 border-primary/25 bg-primary/5 p-4">
-                    <p className="font-mono text-[9px] uppercase tracking-widest text-primary font-bold">
-                      {IsUpdate ? `What's new since v${Installed}` : `What's in v${Current}`}
-                    </p>
-                    {Entries.map((Entry) => (
-                      <div key={Entry.version} className="flex flex-col gap-1.5">
-                        {Entries.length > 1 && (
-                          <p className="font-mono text-[9px] text-primary/50 uppercase tracking-widest">v{Entry.version} — {Entry.date}</p>
-                        )}
-                        {Entry.notes.map((Note, I) => (
-                          <div key={I} className="flex items-start gap-2">
-                            <span className="text-primary shrink-0 font-mono text-[9px] mt-px">+</span>
-                            <span className="font-mono text-[9px] text-muted-foreground">{Note}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
+              {UpdateDownloading && (
+                <div className="flex flex-col gap-2">
+                  <ProgressBar value={UpdateProgress} max={100} />
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                    {UpdateProgress >= 100 ? 'Launching installer...' : 'Downloading update...'}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {Screen === 'install' && Status && (
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold font-display uppercase tracking-widest text-primary flex items-center gap-2">
+                  <ChevronRight size={14} />
+                  Install Destination Directory
+                </label>
+                <div className="flex items-stretch gap-0">
+                  <input
+                    type="text"
+                    value={InstallPath}
+                    onChange={(E) => {
+                      SetInstallPath(E.target.value)
+                      RefreshStatus(E.target.value)
+                    }}
+                    className="flex-1 border-2 border-r-0 border-border bg-black/50 p-2 font-mono text-xs text-foreground outline-none focus:border-primary transition-colors"
+                  />
+                  <button
+                    onClick={HandleBrowseInstallDir}
+                    className="shrink-0 border-2 border-border bg-black/50 px-4 text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-all font-mono text-[10px] uppercase tracking-widest"
+                  >
+                    Browse
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold font-display uppercase tracking-widest text-primary flex items-center gap-2">
+                  <ChevronRight size={14} />
+                  Download / nupkg Source (Optional)
+                </label>
+                <div className="flex items-stretch gap-0">
+                  <input
+                    type="text"
+                    placeholder="URL or file path, or leave empty to use built-in files..."
+                    value={SourcePath}
+                    onChange={(E) => SetSourcePath(E.target.value)}
+                    className="flex-1 border-2 border-r-0 border-border bg-black/50 p-2 font-mono text-xs text-foreground placeholder:text-muted-foreground/30 outline-none focus:border-primary transition-colors"
+                  />
+                  <button
+                    onClick={HandleBrowseSource}
+                    className="shrink-0 border-2 border-border bg-black/50 px-4 text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-all font-mono text-[10px] uppercase tracking-widest"
+                  >
+                    Select File
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-2 border-border bg-card p-4">
+                {Status.broken ? (
+                  <div className="flex items-start gap-2 text-destructive font-mono text-xs">
+                    <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                    <span><span className="font-bold">WARNING:</span> Installation is broken. Click Repair to fix it.</span>
                   </div>
-                )
-              })()}
+                ) : (
+                  <div className="flex items-start gap-2 text-muted-foreground font-mono text-xs">
+                    <Info size={16} className="shrink-0 mt-0.5" />
+                    <span>Ready to install Barb&apos;s Snatcher v{Status.currentVersion}.</span>
+                  </div>
+                )}
+              </div>
 
               <div className="flex flex-col gap-2 font-mono text-xs border-2 border-border bg-black/30 p-4">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={OpenAfter}
-                    onChange={(E) => SetOpenAfter(E.target.checked)}
-                    className="accent-primary"
-                  />
+                  <input type="checkbox" checked={OpenAfter} onChange={(E) => SetOpenAfter(E.target.checked)} className="accent-primary" />
                   <span>Launch application after installation</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={CreateShortcut}
-                    onChange={(E) => SetCreateShortcut(E.target.checked)}
-                    className="accent-primary"
-                  />
-                  <span>Create Desktop & Start Menu Shortcuts</span>
+                  <input type="checkbox" checked={CreateShortcut} onChange={(E) => SetCreateShortcut(E.target.checked)} className="accent-primary" />
+                  <span>Create Desktop &amp; Start Menu shortcuts</span>
                 </label>
               </div>
             </div>
@@ -794,89 +838,66 @@ function InstallerPage() {
             </div>
           )}
 
-          {Screen === 'success' && (
-            <div className="flex flex-col gap-6 items-center justify-center text-center h-full">
-              <div className="border-2 border-primary bg-primary/10 p-6 rounded-full">
+          {Screen === 'done' && (
+            <div className="flex flex-col gap-6 items-center justify-center h-full text-center">
+              <div className="border-2 border-primary bg-primary/10 p-6">
                 <CheckCircle size={48} className="text-primary" />
               </div>
               <div className="flex flex-col gap-2">
                 <h3 className="font-display font-bold text-lg uppercase tracking-tight text-white">Setup Completed</h3>
-                <p className="font-mono text-xs text-muted-foreground">
-                  Barb&apos;s Snatcher has been successfully configured.
-                </p>
+                <p className="font-mono text-xs text-muted-foreground">Barb&apos;s Snatcher has been successfully installed.</p>
               </div>
             </div>
           )}
 
           {Screen === 'error' && (
-            <div className="flex flex-col gap-6 items-center justify-center text-center h-full">
-              <div className="border-2 border-destructive bg-destructive/10 p-6 rounded-full">
+            <div className="flex flex-col gap-6 items-center justify-center h-full text-center">
+              <div className="border-2 border-destructive bg-destructive/10 p-6">
                 <XCircle size={48} className="text-destructive" />
               </div>
               <div className="flex flex-col gap-2">
-                <h3 className="font-display font-bold text-lg uppercase tracking-tight text-destructive">Installation Failed</h3>
-                <p className="font-mono text-xs text-muted-foreground max-w-md break-words">
-                  {ErrorMessage}
-                </p>
+                <h3 className="font-display font-bold text-lg uppercase tracking-tight text-destructive">Failed</h3>
+                <p className="font-mono text-xs text-muted-foreground max-w-md break-words">{ErrorMessage}</p>
               </div>
             </div>
           )}
-        </main>
+        </div>
 
-        <footer className="border-t-2 border-border pt-4 flex gap-4 justify-end">
-          {Screen === 'welcome' && Status && (
+        <footer className="border-t-2 border-border pt-4 mt-4 flex gap-4 justify-end shrink-0">
+          {Screen === 'update' && !UpdateDownloading && (
             <>
-              {Status.broken ? (
-                <>
-                  <CyberButton onClick={() => RunInstallation('repair')} className="border-destructive text-destructive bg-destructive/10">
-                    Repair
-                  </CyberButton>
-                  <CyberButton onClick={() => RunInstallation('reinstall')}>
-                    Reinstall
-                  </CyberButton>
-                </>
-              ) : Status.installed ? (
-                <>
-                  <CyberButton onClick={HandleLaunch} className="border-primary text-primary bg-primary/10">
-                    Launch
-                  </CyberButton>
-                  {(() => {
-                    const InstalledV = Status.installedVersion || '0.0.0'
-                    const GithubV = LatestRelease?.version
-                    const HasUpdate = GithubV
-                      ? SemVerGt(GithubV, InstalledV)
-                      : SemVerGt(Status.currentVersion, InstalledV)
-                    const UpdateLabel = GithubV && HasUpdate ? `Update to v${GithubV}` : 'Update'
-                    return HasUpdate ? (
-                      <CyberButton onClick={() => RunInstallation('update')}>{UpdateLabel}</CyberButton>
-                    ) : (
-                      <CyberButton onClick={() => RunInstallation('reinstall')}>Reinstall</CyberButton>
-                    )
-                  })()}
-                </>
-              ) : (
-                <CyberButton onClick={() => RunInstallation('install')}>
-                  Install
-                </CyberButton>
-              )}
+              <CyberButton
+                onClick={HandleLaunch}
+                className="border-muted-foreground/40 text-muted-foreground bg-transparent"
+              >
+                Launch
+              </CyberButton>
+              <CyberButton onClick={HandleUpdate}>Update</CyberButton>
             </>
           )}
 
-          {Screen === 'success' && (
+          {Screen === 'install' && Status && (
+            Status.broken ? (
+              <>
+                <CyberButton onClick={() => RunInstallation('repair')} className="border-destructive text-destructive bg-destructive/10">
+                  Repair
+                </CyberButton>
+                <CyberButton onClick={() => RunInstallation('reinstall')}>Reinstall</CyberButton>
+              </>
+            ) : (
+              <CyberButton onClick={() => RunInstallation('install')}>Install</CyberButton>
+            )
+          )}
+
+          {Screen === 'done' && (
             <>
-              <CyberButton onClick={HandleLaunch}>
-                Launch App
-              </CyberButton>
-              <CyberButton onClick={() => window.api.close()} className="border-muted bg-transparent text-muted-foreground">
-                Exit
-              </CyberButton>
+              <CyberButton onClick={HandleLaunch}>Launch App</CyberButton>
+              <CyberButton onClick={() => window.api.close()} className="border-muted bg-transparent text-muted-foreground">Exit</CyberButton>
             </>
           )}
 
           {Screen === 'error' && (
-            <CyberButton onClick={() => SetScreen('welcome')}>
-              Try Again
-            </CyberButton>
+            <CyberButton onClick={Init}>Try Again</CyberButton>
           )}
         </footer>
       </div>

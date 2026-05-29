@@ -23,6 +23,7 @@ const Api = {
   launchInstalledApp: (TargetPath: string) => ipcRenderer.invoke('launch-installed-app', TargetPath),
 
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getDefaultInstallDir: () => ipcRenderer.invoke('get-default-install-dir'),
   downloadAndLaunchUpdate: (Url: string) => ipcRenderer.invoke('download-and-launch-update', Url),
 
   onJobUpdate: (Cb: (State: unknown) => void) =>
