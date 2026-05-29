@@ -15,6 +15,8 @@ interface Config {
   cookie: string
   apiKey: string
   downloadPath: string
+  deleteAfterReupload: boolean
+  reuploadingEnabled: boolean
 }
 
 interface OutputEntry {
@@ -66,9 +68,11 @@ function LoadConfig(): Config {
       cookie: Raw.cookie ?? '',
       apiKey: Raw.apiKey ?? '',
       downloadPath: Raw.downloadPath ?? '',
+      deleteAfterReupload: Raw.deleteAfterReupload ?? false,
+      reuploadingEnabled: Raw.reuploadingEnabled ?? true,
     }
   } catch {
-    return { cookie: '', apiKey: '', downloadPath: '' }
+    return { cookie: '', apiKey: '', downloadPath: '', deleteAfterReupload: false, reuploadingEnabled: true }
   }
 }
 
@@ -106,14 +110,14 @@ function SetState(Patch: Partial<JobState>): void {
   MainWindow?.webContents.send('job-update', State)
 }
 
-async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: string[], CreatorType: string, CreatorId: number): Promise<void> {
+async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: string[], CreatorType: string, CreatorId: number, DownloadOnly: boolean = false): Promise<void> {
   const Cfg = LoadConfig()
-  if (!Cfg.apiKey) {
-    SetState({ status: 'error', error: 'No API key set. Go to Settings and add your Open Cloud API key.' })
-    return
-  }
   if (!Cfg.cookie) {
     SetState({ status: 'error', error: 'No cookie set. Go to Settings and paste your .ROBLOSECURITY cookie.' })
+    return
+  }
+  if (!DownloadOnly && !Cfg.apiKey) {
+    SetState({ status: 'error', error: 'No API key set. Go to Settings and add your Open Cloud API key.' })
     return
   }
 
@@ -142,9 +146,10 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
   })
 
   const CsrfToken = await FetchCsrfToken(Cfg.cookie)
-  const UserId = await FetchUserId(Cfg.cookie)
+  const ShouldUpload = !DownloadOnly && Cfg.reuploadingEnabled
+  const UserId = ShouldUpload ? await FetchUserId(Cfg.cookie) : null
 
-  if (!UserId) {
+  if (ShouldUpload && !UserId) {
     SetState({ status: 'error', error: 'Could not resolve user ID from cookie. Cookie may be expired.' })
     return
   }
@@ -186,22 +191,32 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
         continue
       }
 
-      Entry.status = 'Uploading...'
-      SetState({ outputs: [...Outputs] })
+      if (ShouldUpload) {
+        Entry.status = 'Uploading...'
+        SetState({ outputs: [...Outputs] })
 
-      const UlResult = await UploadSound(DlResult.FilePath, Id, Cfg.apiKey, UserId, CreatorType, CreatorId)
+        const UlResult = await UploadSound(DlResult.FilePath, Id, Cfg.apiKey, UserId ?? 0, CreatorType, CreatorId)
 
-      Done++
-      if (UlResult.Ok && UlResult.NewId) {
-        Ok++
-        Mapping[Id] = UlResult.NewId
-        Entry.newId = UlResult.NewId
-        Entry.status = 'Success'
+        Done++
+        if (UlResult.Ok && UlResult.NewId) {
+          Ok++
+          Mapping[Id] = UlResult.NewId
+          Entry.newId = UlResult.NewId
+          Entry.status = 'Success'
+          if (Cfg.deleteAfterReupload) {
+            try { fs.unlinkSync(DlResult.FilePath) } catch {}
+          }
+        } else {
+          Failed++
+          BumpReason(`[upload] ${UlResult.Error}`)
+          Entry.newId = 'Failed'
+          Entry.status = `[upload] ${UlResult.Error}`
+        }
       } else {
-        Failed++
-        BumpReason(`[upload] ${UlResult.Error}`)
-        Entry.newId = 'Failed'
-        Entry.status = `[upload] ${UlResult.Error}`
+        Done++
+        Ok++
+        Entry.newId = '-'
+        Entry.status = 'Downloaded'
       }
       SetState({ done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
     }
@@ -454,6 +469,21 @@ app.whenReady().then(() => {
   ipcMain.handle('get-job-state', () => State)
   ipcMain.handle('get-server-port', () => ServerPort)
   ipcMain.handle('get-downloads-path', () => EffectiveDownloadsBase())
+
+  ipcMain.handle('run-download-without-plugin', (_E, IdsString: string) => {
+    if (State.status === 'processing') {
+      return { ok: false, error: 'A job is already running.' }
+    }
+    const Ids = IdsString
+      .split(/[\s,;\n]+/)
+      .map((S) => S.trim())
+      .filter((S) => /^\d+$/.test(S))
+    if (Ids.length === 0) {
+      return { ok: false, error: 'No valid sound IDs found.' }
+    }
+    RunJob(Ids, {}, [], 'User', 0, true)
+    return { ok: true, count: Ids.length }
+  })
 
   ipcMain.handle('select-download-dir', async () => {
     if (!MainWindow) return null

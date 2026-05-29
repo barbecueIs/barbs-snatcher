@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Settings, Star, Minus, Square, X,
@@ -17,7 +17,7 @@ const iVar = {
   show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 320, damping: 26 } },
 }
 
-interface Config { cookie: string; apiKey: string; downloadPath: string }
+interface Config { cookie: string; apiKey: string; downloadPath: string; deleteAfterReupload: boolean; reuploadingEnabled: boolean }
 interface ServerStatus { listening: boolean; port?: number; error?: string }
 
 function CyberButton({
@@ -80,6 +80,47 @@ function StatusCard({
   )
 }
 
+function ToggleCard({
+  label,
+  description,
+  value,
+  onChange,
+}: {
+  label: string
+  description: string
+  value: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`border-2 p-5 flex items-center justify-between w-full text-left transition-colors ${
+        value ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-primary/30'
+      }`}
+    >
+      <div className="flex flex-col gap-1">
+        <span className={`font-display font-bold text-sm uppercase tracking-widest transition-colors ${value ? 'text-primary' : 'text-white'}`}>
+          {label}
+        </span>
+        <span className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest leading-relaxed">
+          {description}
+        </span>
+      </div>
+      <div className={`shrink-0 ml-6 flex items-center gap-2 font-mono text-[9px] uppercase tracking-widest ${value ? 'text-primary' : 'text-muted-foreground'}`}>
+        <span>{value ? 'On' : 'Off'}</span>
+        <div className={`relative w-9 h-5 border-2 ${value ? 'border-primary' : 'border-border'}`}>
+          <motion.div
+            className={`absolute top-0.5 h-3 w-3.5 ${value ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+            animate={{ x: value ? 16 : 2 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+          />
+        </div>
+      </div>
+    </button>
+  )
+}
+
 function ProgressBar({ value, max }: { value: number; max: number }) {
   const Pct = max > 0 ? Math.min((value / max) * 100, 100) : 0
   return (
@@ -100,6 +141,7 @@ function MenuView({ config, serverStatus }: { config: Config; serverStatus: Serv
     mapping: {}, error: null, failReasons: {}, sessionDir: null, sessionName: null,
   })
   const [DownloadsPath, SetDownloadsPath] = useState('')
+  const [ManualIds, SetManualIds] = useState('')
 
   useEffect(() => {
     window.api.getJobState().then(SetJobState)
@@ -107,6 +149,17 @@ function MenuView({ config, serverStatus }: { config: Config; serverStatus: Serv
     window.api.onJobUpdate(SetJobState as (s: unknown) => void)
     return () => window.api.removeListeners()
   }, [])
+
+  const ValidIds = useMemo(
+    () => ManualIds.split(/[\s,;\n]+/).map((S) => S.trim()).filter((S) => /^\d+$/.test(S)),
+    [ManualIds]
+  )
+
+  const HandleManualDownload = useCallback(async () => {
+    if (ValidIds.length === 0 || JobState.status === 'processing') return
+    await window.api.runDownloadWithoutPlugin(ManualIds)
+    SetManualIds('')
+  }, [ManualIds, ValidIds.length, JobState.status])
 
   const CookieOk = !!config.cookie
   const ApiKeyOk = !!config.apiKey
@@ -237,6 +290,39 @@ function MenuView({ config, serverStatus }: { config: Config; serverStatus: Serv
           </div>
         </div>
       </motion.div>
+
+      <motion.div variants={iVar} className="border-2 border-border bg-card p-6 flex flex-col gap-4 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-5 font-display text-7xl font-black pointer-events-none select-none text-primary">
+          <Download size={64} />
+        </div>
+        <div className="flex items-center gap-2">
+          <Download size={14} className="text-primary shrink-0" />
+          <span className="text-xs font-bold font-display uppercase tracking-widest text-primary">Download Without Plugin</span>
+        </div>
+        <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+          Paste sound IDs separated by commas, spaces, or newlines. Downloads only — no upload or in-game replacement.
+        </p>
+        <textarea
+          value={ManualIds}
+          onChange={(E) => SetManualIds(E.target.value)}
+          placeholder="123456789, 987654321, ..."
+          rows={3}
+          disabled={JobState.status === 'processing'}
+          className="w-full border-2 border-border bg-black/50 p-3 font-mono text-xs text-foreground placeholder:text-muted-foreground/30 outline-none focus:border-primary transition-colors resize-none disabled:opacity-40 select-text"
+        />
+        <div className="flex items-center justify-between">
+          <span className={`font-mono text-[9px] uppercase tracking-widest transition-colors ${ValidIds.length > 0 ? 'text-primary' : 'text-transparent'}`}>
+            {ValidIds.length} ID{ValidIds.length === 1 ? '' : 's'} detected
+          </span>
+          <CyberButton
+            onClick={HandleManualDownload}
+            disabled={ValidIds.length === 0 || JobState.status === 'processing'}
+          >
+            <Download size={14} />
+            Download{ValidIds.length > 0 ? ` ${ValidIds.length} Sound${ValidIds.length === 1 ? '' : 's'}` : ''}
+          </CyberButton>
+        </div>
+      </motion.div>
     </motion.div>
   )
 }
@@ -304,10 +390,17 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
   const [Cookie, SetCookie] = useState('')
   const [ApiKey, SetApiKey] = useState('')
   const [DownloadPath, SetDownloadPath] = useState(config.downloadPath)
+  const [DeleteAfterReupload, SetDeleteAfterReupload] = useState(config.deleteAfterReupload)
+  const [ReuploadingEnabled, SetReuploadingEnabled] = useState(config.reuploadingEnabled)
 
   useEffect(() => {
     SetDownloadPath(config.downloadPath)
   }, [config.downloadPath])
+
+  useEffect(() => {
+    SetDeleteAfterReupload(config.deleteAfterReupload)
+    SetReuploadingEnabled(config.reuploadingEnabled)
+  }, [config.deleteAfterReupload, config.reuploadingEnabled])
   const [EffectivePath, SetEffectivePath] = useState('')
   const [Saved, SetSaved] = useState(false)
 
@@ -324,11 +417,27 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
     SetDownloadPath('')
   }, [])
 
+  const HandleToggle = useCallback(async (Field: 'deleteAfterReupload' | 'reuploadingEnabled', Val: boolean) => {
+    if (Field === 'deleteAfterReupload') SetDeleteAfterReupload(Val)
+    else SetReuploadingEnabled(Val)
+    const Next: Config = {
+      cookie: config.cookie,
+      apiKey: config.apiKey,
+      downloadPath: DownloadPath,
+      deleteAfterReupload: Field === 'deleteAfterReupload' ? Val : DeleteAfterReupload,
+      reuploadingEnabled: Field === 'reuploadingEnabled' ? Val : ReuploadingEnabled,
+    }
+    await window.api.saveConfig(Next)
+    onSave(Next)
+  }, [config, DownloadPath, DeleteAfterReupload, ReuploadingEnabled, onSave])
+
   const HandleSave = useCallback(async () => {
     const Next: Config = {
       cookie: Cookie || config.cookie,
       apiKey: ApiKey || config.apiKey,
       downloadPath: DownloadPath,
+      deleteAfterReupload: DeleteAfterReupload,
+      reuploadingEnabled: ReuploadingEnabled,
     }
     await window.api.saveConfig(Next)
     onSave(Next)
@@ -336,13 +445,28 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
     SetApiKey('')
     SetSaved(true)
     setTimeout(() => SetSaved(false), 1500)
-  }, [Cookie, ApiKey, DownloadPath, config, onSave])
+  }, [Cookie, ApiKey, DownloadPath, DeleteAfterReupload, ReuploadingEnabled, config, onSave])
 
   return (
     <motion.div variants={cVar} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-8 w-full max-w-5xl mx-auto">
       <motion.div variants={iVar} className="border-l-4 border-primary pl-6 py-2">
         <h2 className="text-4xl font-display font-bold uppercase tracking-tight text-white">Settings</h2>
         <p className="text-muted-foreground mt-2 font-mono text-sm">CONFIGURE AUTHENTICATION AND DOWNLOAD OPTIONS.</p>
+      </motion.div>
+
+      <motion.div variants={iVar} className="grid grid-cols-2 gap-6">
+        <ToggleCard
+          label="Reuploading Enabled"
+          description="When off, sounds are downloaded only — not uploaded or replaced in-game"
+          value={ReuploadingEnabled}
+          onChange={(V) => HandleToggle('reuploadingEnabled', V)}
+        />
+        <ToggleCard
+          label="Delete After Reupload"
+          description="Deletes downloaded files from disk after a successful reupload"
+          value={DeleteAfterReupload}
+          onChange={(V) => HandleToggle('deleteAfterReupload', V)}
+        />
       </motion.div>
 
       <motion.div variants={iVar} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -945,7 +1069,7 @@ function OutputView() {
           {JobState.outputs && JobState.outputs.length > 0 ? (
             JobState.outputs.map((O) => {
               let StatusColor = 'text-muted-foreground'
-              if (O.status === 'Success') {
+              if (O.status === 'Success' || O.status === 'Downloaded') {
                 StatusColor = 'text-primary'
               } else if (O.status.includes('[download]') || O.status.includes('[upload]')) {
                 StatusColor = 'text-destructive'
@@ -980,7 +1104,7 @@ export default function App() {
   }
 
   const [View, SetView] = useState('menu')
-  const [Config, SetConfig] = useState<Config>({ cookie: '', apiKey: '', downloadPath: '' })
+  const [Config, SetConfig] = useState<Config>({ cookie: '', apiKey: '', downloadPath: '', deleteAfterReupload: false, reuploadingEnabled: true })
   const [ServerStatus, SetServerStatus] = useState<ServerStatus>({ listening: false })
   const [CurrentVersion, SetCurrentVersion] = useState('')
   const [UpdateInfo, SetUpdateInfo] = useState<{ version: string | null; downloadUrl: string | null } | null>(null)
