@@ -426,8 +426,11 @@ app.whenReady().then(() => {
       if (!Res.ok) return null
       const Body = await Res.json() as { tag_name?: string; assets?: { name?: string; browser_download_url?: string }[] }
       const Version = (Body.tag_name ?? '').replace(/^v/, '') || null
-      const Asset = (Body.assets ?? []).find((A) => A.name?.endsWith('-setup.exe'))
-      return { version: Version, downloadUrl: Asset?.browser_download_url ?? null }
+      const Assets = Body.assets ?? []
+      const NupkgAsset = Assets.find((A) => A.name?.includes('full') && A.name?.endsWith('.nupkg'))
+      const SetupAsset = Assets.find((A) => A.name?.endsWith('-setup.exe'))
+      const DownloadUrl = NupkgAsset?.browser_download_url ?? SetupAsset?.browser_download_url ?? null
+      return { version: Version, downloadUrl: DownloadUrl }
     } catch {
       return null
     }

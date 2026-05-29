@@ -205,6 +205,10 @@ async function PollOperation(
         signal: AbortSignal.timeout(12000)
       })
       if (!Res.ok) {
+        if (Res.status === 429 || Res.status >= 500) {
+          await Sleep(POLL_INTERVAL_MS)
+          continue
+        }
         const ErrText = await Res.text().catch(() => '')
         return { NewId: null, Error: `Poll HTTP ${Res.status}: ${ErrText.slice(0, 120)}` }
       }

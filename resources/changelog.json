@@ -1,5 +1,14 @@
 [
   {
+    "version": "1.0.3",
+    "date": "2026-05-29",
+    "notes": [
+      "Fixed upload failures caused by Roblox API rate limits (HTTP 429)",
+      "Extended upload operation timeout from 10s to 90s",
+      "Launcher now auto-updates from GitHub releases without needing to be rebuilt"
+    ]
+  },
+  {
     "version": "1.0.2",
     "date": "2026-05-27",
     "notes": [
