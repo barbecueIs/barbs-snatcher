@@ -195,7 +195,7 @@ function MenuView({ config, serverStatus, onSave }: { config: Config; serverStat
     <motion.div variants={cVar} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-8 w-full max-w-5xl mx-auto">
       <motion.div variants={iVar} className="border-l-4 border-primary pl-6 py-2">
         <h2 className="text-4xl font-display font-bold uppercase tracking-tight text-white">System Status</h2>
-        <p className="text-muted-foreground mt-2 font-mono text-sm">REAL-TIME OVERVIEW OF ALL SERVICE COMPONENTS.</p>
+        <p className="text-muted-foreground mt-2 font-mono text-sm">Shows what's connected and ready to go.</p>
       </motion.div>
 
       <motion.div variants={iVar} className="grid grid-cols-3 gap-6">
@@ -210,7 +210,7 @@ function MenuView({ config, serverStatus, onSave }: { config: Config; serverStat
           icon={Wifi}
           label="Network"
           value={NetworkOk ? 'Listening' : 'Offline'}
-          sub={NetworkOk ? `:${serverStatus.port ?? 54321} — ready for Studio` : (serverStatus.error ?? 'server not started')}
+          sub={NetworkOk ? `:${serverStatus.port ?? 54321}, ready for Studio` : (serverStatus.error ?? 'server not started')}
           ok={NetworkOk}
         />
         <StatusCard
@@ -311,7 +311,7 @@ function MenuView({ config, serverStatus, onSave }: { config: Config; serverStat
           <Terminal size={13} className="text-primary mt-0.5 shrink-0" />
           <div className="font-mono text-[10px] text-muted-foreground space-y-1 uppercase tracking-wider">
             <p>&gt; Install the Studio plugin from <span className="text-primary">plugin/snatcher_plugin.lua</span></p>
-            <p>&gt; Run it in Roblox Studio — it will connect to this app automatically</p>
+            <p>&gt; Run it in Roblox Studio, it will connect to this app automatically</p>
             <p>&gt; Downloads saved to <span className="text-primary truncate inline-block max-w-xs align-bottom">{DownloadsPath || '...'}</span></p>
           </div>
         </div>
@@ -326,7 +326,7 @@ function MenuView({ config, serverStatus, onSave }: { config: Config; serverStat
           <span className="text-xs font-bold font-display uppercase tracking-widest text-primary">Download Without Plugin</span>
         </div>
         <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
-          Paste sound IDs separated by commas, spaces, or newlines. Downloads only — no upload or in-game replacement.
+          Paste sound IDs separated by commas, spaces, or newlines. Downloads only. No uploading or replacing sounds in your game.
         </p>
 
         <div className="flex flex-col gap-3 border-2 border-border bg-black/20 p-4">
@@ -353,7 +353,7 @@ function MenuView({ config, serverStatus, onSave }: { config: Config; serverStat
             </div>
           ) : (
             <span className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest">
-              No place IDs saved — required to authorize CDN downloads.
+              No place IDs saved yet. These are required to authorize downloads.
             </span>
           )}
           <div className="flex items-stretch gap-0">
@@ -530,13 +530,13 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
     <motion.div variants={cVar} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-8 w-full max-w-5xl mx-auto">
       <motion.div variants={iVar} className="border-l-4 border-primary pl-6 py-2">
         <h2 className="text-4xl font-display font-bold uppercase tracking-tight text-white">Settings</h2>
-        <p className="text-muted-foreground mt-2 font-mono text-sm">CONFIGURE AUTHENTICATION AND DOWNLOAD OPTIONS.</p>
+        <p className="text-muted-foreground mt-2 font-mono text-sm">Configure your credentials and download settings.</p>
       </motion.div>
 
       <motion.div variants={iVar} className="grid grid-cols-2 gap-6">
         <ToggleCard
           label="Reuploading Enabled"
-          description="When off, sounds are downloaded only — not uploaded or replaced in-game"
+          description="When off, sounds are downloaded but not uploaded or replaced in-game"
           value={ReuploadingEnabled}
           onChange={(V) => HandleToggle('reuploadingEnabled', V)}
         />
@@ -623,7 +623,7 @@ function CreditsView() {
     <motion.div variants={cVar} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-8 w-full max-w-5xl mx-auto">
       <motion.div variants={iVar} className="border-l-4 border-primary pl-6 py-2">
         <h2 className="text-4xl font-display font-bold uppercase tracking-tight text-white">Credits</h2>
-        <p className="text-muted-foreground mt-2 font-mono text-sm">THE PEOPLE BEHIND THIS TOOL.</p>
+        <p className="text-muted-foreground mt-2 font-mono text-sm">The people who made this.</p>
       </motion.div>
 
       <motion.div variants={iVar} className="border-2 border-border bg-card p-12 flex flex-col items-center gap-8 relative overflow-hidden">
@@ -930,7 +930,7 @@ function InstallerPage() {
                   {UpdateEntries.map((Entry) => (
                     <div key={Entry.version} className="flex flex-col gap-1.5">
                       {UpdateEntries.length > 1 && (
-                        <p className="font-mono text-[9px] text-primary/50 uppercase tracking-widest">v{Entry.version} — {Entry.date}</p>
+                        <p className="font-mono text-[9px] text-primary/50 uppercase tracking-widest">v{Entry.version} · {Entry.date}</p>
                       )}
                       {Entry.notes.map((Note, I) => (
                         <div key={I} className="flex items-start gap-2">
@@ -1134,7 +1134,7 @@ function OutputView() {
       <motion.div variants={iVar} className="border-l-4 border-primary pl-6 py-2 flex justify-between items-end">
         <div>
           <h2 className="text-4xl font-display font-bold uppercase tracking-tight text-white">Download Output</h2>
-          <p className="text-muted-foreground mt-2 font-mono text-sm">REAL-TIME SNATCHER OUTPUT AND ERRORS.</p>
+          <p className="text-muted-foreground mt-2 font-mono text-sm">Live output from the current job.</p>
         </div>
         {JobState.sessionName ? (
           <span className="font-mono text-xs text-primary uppercase tracking-widest border-2 border-primary/20 bg-primary/5 px-3 py-1">
