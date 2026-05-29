@@ -542,18 +542,24 @@ app.whenReady().then(() => {
       if (NupkgFile && fs.existsSync(NupkgFile)) {
         const Zip = new AdmZip(NupkgFile)
         const ZipEntries = Zip.getEntries()
-        for (const Entry of ZipEntries) {
-          if (Entry.entryName.startsWith('lib/net45/')) {
-            const RelPath = Entry.entryName.substring('lib/net45/'.length)
-            if (!RelPath) continue
-            const DestFile = join(Dest, RelPath)
-            if (Entry.isDirectory) {
-              fs.mkdirSync(DestFile, { recursive: true })
-            } else {
-              fs.mkdirSync(dirname(DestFile), { recursive: true })
-              fs.writeFileSync(DestFile, Zip.readFile(Entry))
+        const OriginalNoAsar = process.noAsar
+        process.noAsar = true
+        try {
+          for (const Entry of ZipEntries) {
+            if (Entry.entryName.startsWith('lib/net45/')) {
+              const RelPath = Entry.entryName.substring('lib/net45/'.length)
+              if (!RelPath) continue
+              const DestFile = join(Dest, RelPath)
+              if (Entry.isDirectory) {
+                fs.mkdirSync(DestFile, { recursive: true })
+              } else {
+                fs.mkdirSync(dirname(DestFile), { recursive: true })
+                fs.writeFileSync(DestFile, Zip.readFile(Entry))
+              }
             }
           }
+        } finally {
+          process.noAsar = OriginalNoAsar
         }
         if (Source.startsWith('http')) {
           try { fs.unlinkSync(NupkgFile) } catch {}
