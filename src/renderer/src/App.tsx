@@ -328,6 +328,11 @@ function MenuView({ config, serverStatus }: { config: Config; serverStatus: Serv
   )
 }
 
+function MaskSecret(Val: string): string {
+  if (Val.length <= 8) return '•'.repeat(Val.length)
+  return Val.slice(0, 4) + '•'.repeat(20) + Val.slice(-4)
+}
+
 function InputField({
   label,
   value,
@@ -335,7 +340,7 @@ function InputField({
   placeholder,
   hint,
   steps,
-  currentCharCount,
+  currentValue,
 }: {
   label: string
   value: string
@@ -343,7 +348,7 @@ function InputField({
   placeholder: string
   hint?: string
   steps?: string[]
-  currentCharCount?: number
+  currentValue?: string
 }) {
   return (
     <div className="border-2 border-border bg-card p-8 flex flex-col gap-6 relative group overflow-hidden">
@@ -363,11 +368,11 @@ function InputField({
           ))}
         </div>
       ) : null}
-      {currentCharCount !== undefined && currentCharCount > 0 ? (
-        <div className="flex items-center gap-2 relative z-10">
+      {currentValue ? (
+        <div className="flex items-center gap-3 border-2 border-primary/20 bg-primary/5 px-3 py-2 relative z-10">
           <StatusDot ok />
-          <span className="font-mono text-[9px] text-primary uppercase tracking-widest">
-            current: {currentCharCount} chars set
+          <span className="font-mono text-[11px] text-primary tracking-widest select-text break-all">
+            {MaskSecret(currentValue)}
           </span>
         </div>
       ) : null}
@@ -476,7 +481,7 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
           value={Cookie}
           onChange={SetCookie}
           placeholder="Paste .ROBLOSECURITY value..."
-          currentCharCount={config.cookie.length}
+          currentValue={config.cookie}
           steps={[
             '  1. Open roblox.com and log in',
             '  2. Press F12 → Application → Cookies',
@@ -489,7 +494,7 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
           value={ApiKey}
           onChange={SetApiKey}
           placeholder="Paste Open Cloud API key..."
-          currentCharCount={config.apiKey.length}
+          currentValue={config.apiKey}
           steps={[
             '  1. Go to create.roblox.com/credentials',
             '  2. Create API Key → Assets API',
