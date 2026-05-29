@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
-import { join, basename, dirname } from 'path'
+import { join, basename, dirname, resolve, normalize } from 'path'
 import * as fs from 'fs'
 import * as http from 'http'
 import * as https from 'https'
@@ -316,11 +316,12 @@ function DownloadFile(Url: string, DestPath: string): Promise<void> {
 
 function CopyFolderSync(From: string, To: string): void {
   fs.mkdirSync(To, { recursive: true })
-  const Entries = fs.readdirSync(From, { withFileTypes: true })
-  for (const Entry of Entries) {
-    const Src = join(From, Entry.name)
-    const Dest = join(To, Entry.name)
-    if (Entry.isDirectory()) {
+  const Names = fs.readdirSync(From)
+  for (const Name of Names) {
+    const Src = join(From, Name)
+    const Dest = join(To, Name)
+    const Stat = fs.lstatSync(Src)
+    if (Stat.isDirectory() && !Name.endsWith('.asar')) {
       CopyFolderSync(Src, Dest)
     } else {
       fs.copyFileSync(Src, Dest)
@@ -559,12 +560,15 @@ app.whenReady().then(() => {
         }
       } else {
         const CurrentDir = dirname(process.execPath)
-        const OriginalNoAsar = process.noAsar
-        process.noAsar = true
-        try {
-          CopyFolderSync(CurrentDir, Dest)
-        } finally {
-          process.noAsar = OriginalNoAsar
+        const IsSameDir = normalize(resolve(CurrentDir)) === normalize(resolve(Dest))
+        if (!IsSameDir) {
+          const OriginalNoAsar = process.noAsar
+          process.noAsar = true
+          try {
+            CopyFolderSync(CurrentDir, Dest)
+          } finally {
+            process.noAsar = OriginalNoAsar
+          }
         }
       }
 
