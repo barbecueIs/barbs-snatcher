@@ -269,10 +269,12 @@ function StartHttpServer(): void {
   })
 }
 
+const IsInstallerArg = process.argv.includes('--installer')
+
 const IsInstaller =
   process.env.PORTABLE_EXECUTABLE_DIR !== undefined ||
   app.getPath('exe').toLowerCase().includes('setup') ||
-  process.argv.includes('--installer')
+  IsInstallerArg
 
 const GetDefaultInstallDir = (): string => join(app.getPath('home'), 'AppData', 'Local', 'barbs-snatcher')
 
@@ -396,6 +398,14 @@ function CreateWindow(): void {
   }
 }
 
+if (IsInstallerArg) {
+  try {
+    const D = dirname(process.execPath)
+    fs.writeFileSync(join(D, 'version.json'), JSON.stringify({ version: app.getVersion() }))
+    fs.writeFileSync(join(D, '.installer-version'), app.getVersion())
+  } catch {}
+}
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.barbssnatcher.app')
   app.on('browser-window-created', (_, W) => optimizer.watchWindowShortcuts(W))
@@ -428,15 +438,16 @@ app.whenReady().then(() => {
       const Body = await Res.json() as { tag_name?: string; assets?: { name?: string; browser_download_url?: string }[] }
       const Version = (Body.tag_name ?? '').replace(/^v/, '') || null
       const Assets = Body.assets ?? []
+      const NsisAsset = Assets.find((A) => A.name?.endsWith('-setup.exe') && !A.name?.includes('squirrel'))
       const NupkgAsset = Assets.find((A) => A.name?.includes('full') && A.name?.endsWith('.nupkg'))
-      const SetupAsset = Assets.find((A) => A.name?.endsWith('-setup.exe'))
-      const DownloadUrl = NupkgAsset?.browser_download_url ?? SetupAsset?.browser_download_url ?? null
+      const DownloadUrl = NsisAsset?.browser_download_url ?? NupkgAsset?.browser_download_url ?? null
       return { version: Version, downloadUrl: DownloadUrl }
     } catch {
       return null
     }
   })
 
+  ipcMain.handle('get-app-version', () => app.getVersion())
   ipcMain.handle('load-config', () => LoadConfig())
   ipcMain.handle('save-config', (_E, Data: Config) => { SaveConfig(Data); return { ok: true } })
   ipcMain.handle('get-job-state', () => State)
@@ -614,6 +625,20 @@ app.whenReady().then(() => {
       return { ok: true }
     }
     return { ok: false, error: 'Executable not found.' }
+  })
+
+  ipcMain.handle('download-and-launch-update', async (_E, Url: string) => {
+    const TempPath = join(app.getPath('temp'), 'barbs-snatcher-update.exe')
+    try {
+      MainWindow?.webContents.send('update-download-progress', 5)
+      await DownloadFile(Url, TempPath)
+      MainWindow?.webContents.send('update-download-progress', 100)
+      spawn(TempPath, [], { detached: true, stdio: 'ignore' }).unref()
+      setTimeout(() => app.quit(), 600)
+      return { ok: true }
+    } catch (Err) {
+      return { ok: false, error: Err instanceof Error ? Err.message : 'download failed' }
+    }
   })
 
   ipcMain.on('window-minimize', () => BrowserWindow.getFocusedWindow()?.minimize())

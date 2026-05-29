@@ -18,13 +18,19 @@ forceCodeSigning: false
 win:
   executableName: barbs-snatcher
   target:
+    - nsis
     - squirrel
-    - portable
+nsis:
+  oneClick: true
+  runAfterFinish: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "Barb's Snatcher"
+  artifactName: ${name}-${version}-setup.${ext}
+  include: build/installer.nsh
 squirrelWindows:
   iconUrl: https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/templates/icons/electron.ico
   artifactName: ${name}-${version}-squirrel-setup.${ext}
-portable:
-  artifactName: ${name}-${version}-setup.${ext}
 npmRebuild: false
 publish:
   provider: github

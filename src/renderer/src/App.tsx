@@ -525,9 +525,6 @@ function InstallerPage() {
     window.api.getChangelog().then(SetChangelog)
     window.api.checkLatestRelease().then((Release) => {
       SetLatestRelease(Release)
-      if (Release?.downloadUrl) {
-        SetSourcePath((Prev) => Prev || Release.downloadUrl || '')
-      }
     })
   }, [RefreshStatus])
 
@@ -964,6 +961,10 @@ export default function App() {
   const [View, SetView] = useState('menu')
   const [Config, SetConfig] = useState<Config>({ cookie: '', apiKey: '', downloadPath: '' })
   const [ServerStatus, SetServerStatus] = useState<ServerStatus>({ listening: false })
+  const [CurrentVersion, SetCurrentVersion] = useState('')
+  const [UpdateInfo, SetUpdateInfo] = useState<{ version: string | null; downloadUrl: string | null } | null>(null)
+  const [UpdateDownloading, SetUpdateDownloading] = useState(false)
+  const [UpdateProgress, SetUpdateProgress] = useState(0)
 
   useEffect(() => {
     window.api.loadConfig().then(SetConfig)
@@ -971,12 +972,25 @@ export default function App() {
       SetServerStatus((S) => ({ ...S, port: Port }))
     })
     window.api.onServerStatus((S) => SetServerStatus(S as ServerStatus))
+    window.api.getAppVersion().then((V) => SetCurrentVersion(V as string))
+    window.api.checkLatestRelease().then((R) => {
+      if (R) SetUpdateInfo(R as { version: string | null; downloadUrl: string | null })
+    })
+    window.api.onUpdateDownloadProgress((Pct) => SetUpdateProgress(Pct))
     return () => window.api.removeListeners()
   }, [])
 
   const HandleSaveConfig = useCallback((C: Config) => {
     SetConfig(C)
   }, [])
+
+  const HandleUpdate = useCallback(async () => {
+    if (!UpdateInfo?.downloadUrl || UpdateDownloading) return
+    SetUpdateDownloading(true)
+    SetUpdateProgress(0)
+    await window.api.downloadAndLaunchUpdate(UpdateInfo.downloadUrl)
+    SetUpdateDownloading(false)
+  }, [UpdateInfo, UpdateDownloading])
 
   return (
     <div className="h-screen w-full flex bg-background text-foreground overflow-hidden select-none relative">
@@ -1034,6 +1048,37 @@ export default function App() {
             <SidebarItem icon={Star} label="Credits" active={View === 'credits'} onClick={() => SetView('credits')} />
           </nav>
         </div>
+
+        {CurrentVersion && UpdateInfo?.version && SemVerGt(UpdateInfo.version, CurrentVersion) && (
+          <div className="border-t-2 border-primary/30 bg-primary/5 p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-mono uppercase tracking-widest text-primary font-bold">Update Available</span>
+              <span className="text-[9px] font-mono text-white">v{UpdateInfo.version}</span>
+            </div>
+            {UpdateDownloading ? (
+              <div className="flex flex-col gap-1.5">
+                <div className="w-full h-1.5 bg-black/50 border border-border overflow-hidden">
+                  <motion.div
+                    className="h-full bg-primary"
+                    initial={{ width: '8%' }}
+                    animate={{ width: UpdateProgress >= 100 ? '100%' : '8%' }}
+                    transition={{ ease: 'linear', duration: 0.4 }}
+                  />
+                </div>
+                <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest">
+                  {UpdateProgress >= 100 ? 'Installing...' : 'Downloading...'}
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={HandleUpdate}
+                className="w-full border-2 border-primary bg-primary/10 text-primary font-display font-bold text-[10px] uppercase tracking-widest py-2 hover:bg-primary/20 transition-colors"
+              >
+                Update Now
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="p-5 border-t-2 border-border bg-black/40">
           <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground flex flex-col gap-2">

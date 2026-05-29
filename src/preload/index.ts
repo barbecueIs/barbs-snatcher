@@ -22,13 +22,19 @@ const Api = {
   installApp: (Args: unknown) => ipcRenderer.invoke('install-app', Args),
   launchInstalledApp: (TargetPath: string) => ipcRenderer.invoke('launch-installed-app', TargetPath),
 
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  downloadAndLaunchUpdate: (Url: string) => ipcRenderer.invoke('download-and-launch-update', Url),
+
   onJobUpdate: (Cb: (State: unknown) => void) =>
     ipcRenderer.on('job-update', (_E, V) => Cb(V)),
   onServerStatus: (Cb: (Status: unknown) => void) =>
     ipcRenderer.on('server-status', (_E, V) => Cb(V)),
+  onUpdateDownloadProgress: (Cb: (Pct: number) => void) =>
+    ipcRenderer.on('update-download-progress', (_E, V) => Cb(V as number)),
   removeListeners: () => {
     ipcRenderer.removeAllListeners('job-update')
     ipcRenderer.removeAllListeners('server-status')
+    ipcRenderer.removeAllListeners('update-download-progress')
   },
 }
 
