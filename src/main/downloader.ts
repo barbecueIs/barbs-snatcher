@@ -194,12 +194,15 @@ async function PollOperation(
   OpPath: string,
   ApiKey: string
 ): Promise<{ NewId: string | null; Error: string | null }> {
-  await Sleep(400)
-  for (let I = 0; I < 25; I++) {
+  const MAX_POLL_MS = 90_000
+  const POLL_INTERVAL_MS = 600
+  await Sleep(1500)
+  const Deadline = Date.now() + MAX_POLL_MS
+  while (Date.now() < Deadline) {
     try {
       const Res = await fetch(`https://apis.roblox.com/assets/v1/${OpPath}`, {
         headers: { 'x-api-key': ApiKey },
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(12000)
       })
       if (!Res.ok) {
         const ErrText = await Res.text().catch(() => '')
@@ -217,12 +220,12 @@ async function PollOperation(
         const Id = Body.response?.assetId?.toString() ?? null
         return { NewId: Id, Error: Id ? null : 'operation completed but returned no assetId' }
       }
-    } catch (E: unknown) {
-      return { NewId: null, Error: E instanceof Error ? E.message : 'poll exception' }
+    } catch {
+      // transient network/timeout — keep polling until deadline
     }
-    await Sleep(400)
+    await Sleep(POLL_INTERVAL_MS)
   }
-  return { NewId: null, Error: 'operation timed out after 10s' }
+  return { NewId: null, Error: 'operation timed out after 90s' }
 }
 
 const MIME_MAP: Record<string, string> = {
