@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { twMerge } from 'tailwind-merge'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Settings, Star, Minus, Square, X,
@@ -35,7 +36,7 @@ function CyberButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`relative inline-flex items-center justify-center gap-2 px-6 py-3 font-display font-bold text-sm uppercase tracking-widest text-primary-foreground bg-primary border-2 border-primary brutalist-shadow transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none ${className}`}
+      className={twMerge('relative inline-flex items-center justify-center gap-2 px-6 py-3 font-display font-bold text-sm uppercase tracking-widest text-primary-foreground bg-primary border-2 border-primary brutalist-shadow transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none', className)}
     >
       {children}
     </button>
