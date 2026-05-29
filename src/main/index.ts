@@ -304,19 +304,29 @@ function CreateShortcut(TargetExe: string, ShortcutPath: string): void {
   } catch {}
 }
 
-function DownloadFile(Url: string, DestPath: string): Promise<void> {
+function DownloadFile(Url: string, DestPath: string, OnProgress?: (Pct: number) => void): Promise<void> {
   return new Promise((Resolve, Reject) => {
     const Protocol = Url.startsWith('https') ? https : http
     const Req = Protocol.get(Url, (Res) => {
       if (Res.statusCode && Res.statusCode >= 300 && Res.statusCode < 400 && Res.headers.location) {
-        DownloadFile(Res.headers.location, DestPath).then(Resolve).catch(Reject)
+        Res.resume()
+        DownloadFile(Res.headers.location, DestPath, OnProgress).then(Resolve).catch(Reject)
         return
       }
       if (Res.statusCode !== 200) {
+        Res.resume()
         Reject(new Error(`Failed to download: ${Res.statusCode}`))
         return
       }
+      const Total = parseInt(Res.headers['content-length'] ?? '0', 10)
+      let Received = 0
       const FileStream = fs.createWriteStream(DestPath)
+      Res.on('data', (Chunk: Buffer) => {
+        Received += Chunk.length
+        if (Total > 0 && OnProgress) {
+          OnProgress(Math.min(99, Math.round((Received / Total) * 100)))
+        }
+      })
       Res.pipe(FileStream)
       FileStream.on('finish', () => {
         FileStream.close()
@@ -326,6 +336,10 @@ function DownloadFile(Url: string, DestPath: string): Promise<void> {
         fs.unlink(DestPath, () => {})
         Reject(Err)
       })
+    })
+    Req.setTimeout(60000, () => {
+      Req.destroy()
+      Reject(new Error('Download timed out after 60 seconds of inactivity.'))
     })
     Req.on('error', Reject)
   })
@@ -661,8 +675,10 @@ app.whenReady().then(() => {
   ipcMain.handle('download-and-launch-update', async (_E, Url: string) => {
     const TempPath = join(app.getPath('temp'), 'barbs-snatcher-update.exe')
     try {
-      MainWindow?.webContents.send('update-download-progress', 5)
-      await DownloadFile(Url, TempPath)
+      MainWindow?.webContents.send('update-download-progress', 1)
+      await DownloadFile(Url, TempPath, (Pct) => {
+        MainWindow?.webContents.send('update-download-progress', Pct)
+      })
       MainWindow?.webContents.send('update-download-progress', 100)
       spawn(TempPath, [], { detached: true, stdio: 'ignore' }).unref()
       setTimeout(() => app.quit(), 600)

@@ -1,6 +1,6 @@
 {
   "name": "barbs-snatcher",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Barb's Snatcher — Roblox sound asset tool",
   "main": "./out/main/index.js",
   "author": "Barbecue",
