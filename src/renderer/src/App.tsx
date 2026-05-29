@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Settings, Star, Minus, Square, X,
   Wifi, Key, Cookie, Download, CheckCircle, XCircle,
   ChevronRight, Activity, FolderOpen, Terminal, FolderSearch,
-  Info, AlertTriangle,
+  Info, AlertTriangle, Hash,
 } from 'lucide-react'
 
 const cVar = {
@@ -18,7 +18,7 @@ const iVar = {
   show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 320, damping: 26 } },
 }
 
-interface Config { cookie: string; apiKey: string; downloadPath: string; deleteAfterReupload: boolean; reuploadingEnabled: boolean }
+interface Config { cookie: string; apiKey: string; downloadPath: string; deleteAfterReupload: boolean; reuploadingEnabled: boolean; downloadPlaceIds: string[] }
 interface ServerStatus { listening: boolean; port?: number; error?: string }
 
 function CyberButton({
@@ -136,13 +136,15 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
   )
 }
 
-function MenuView({ config, serverStatus }: { config: Config; serverStatus: ServerStatus }) {
+function MenuView({ config, serverStatus, onSave }: { config: Config; serverStatus: ServerStatus; onSave: (c: Config) => void }) {
   const [JobState, SetJobState] = useState<JobState>({
     status: 'idle', total: 0, done: 0, ok: 0, failed: 0,
     mapping: {}, error: null, failReasons: {}, sessionDir: null, sessionName: null,
   })
   const [DownloadsPath, SetDownloadsPath] = useState('')
   const [ManualIds, SetManualIds] = useState('')
+  const [SavedPlaceIds, SetSavedPlaceIds] = useState<string[]>(config.downloadPlaceIds ?? [])
+  const [NewPlaceId, SetNewPlaceId] = useState('')
 
   useEffect(() => {
     window.api.getJobState().then(SetJobState)
@@ -151,16 +153,39 @@ function MenuView({ config, serverStatus }: { config: Config; serverStatus: Serv
     return () => window.api.removeListeners()
   }, [])
 
+  useEffect(() => {
+    SetSavedPlaceIds(config.downloadPlaceIds ?? [])
+  }, [config.downloadPlaceIds])
+
   const ValidIds = useMemo(
     () => ManualIds.split(/[\s,;\n]+/).map((S) => S.trim()).filter((S) => /^\d+$/.test(S)),
     [ManualIds]
   )
 
+  const HandleAddPlaceId = useCallback(async () => {
+    const Trimmed = NewPlaceId.trim()
+    if (!Trimmed || !/^\d+$/.test(Trimmed) || SavedPlaceIds.includes(Trimmed)) return
+    const Next = [...SavedPlaceIds, Trimmed]
+    SetSavedPlaceIds(Next)
+    SetNewPlaceId('')
+    const NextConfig: Config = { ...config, downloadPlaceIds: Next }
+    await window.api.saveConfig(NextConfig)
+    onSave(NextConfig)
+  }, [NewPlaceId, SavedPlaceIds, config, onSave])
+
+  const HandleRemovePlaceId = useCallback(async (Pid: string) => {
+    const Next = SavedPlaceIds.filter((P) => P !== Pid)
+    SetSavedPlaceIds(Next)
+    const NextConfig: Config = { ...config, downloadPlaceIds: Next }
+    await window.api.saveConfig(NextConfig)
+    onSave(NextConfig)
+  }, [SavedPlaceIds, config, onSave])
+
   const HandleManualDownload = useCallback(async () => {
-    if (ValidIds.length === 0 || JobState.status === 'processing') return
+    if (ValidIds.length === 0 || SavedPlaceIds.length === 0 || JobState.status === 'processing') return
     await window.api.runDownloadWithoutPlugin(ManualIds)
     SetManualIds('')
-  }, [ManualIds, ValidIds.length, JobState.status])
+  }, [ManualIds, ValidIds.length, SavedPlaceIds.length, JobState.status])
 
   const CookieOk = !!config.cookie
   const ApiKeyOk = !!config.apiKey
@@ -303,6 +328,52 @@ function MenuView({ config, serverStatus }: { config: Config; serverStatus: Serv
         <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
           Paste sound IDs separated by commas, spaces, or newlines. Downloads only — no upload or in-game replacement.
         </p>
+
+        <div className="flex flex-col gap-3 border-2 border-border bg-black/20 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Hash size={12} className="text-primary shrink-0" />
+              <span className="font-mono text-[10px] uppercase tracking-widest text-primary font-bold">Place IDs</span>
+            </div>
+            <span className="font-mono text-[9px] uppercase tracking-widest text-destructive">Required</span>
+          </div>
+          {SavedPlaceIds.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {SavedPlaceIds.map((Pid) => (
+                <div key={Pid} className="flex items-center gap-1.5 border border-primary/30 bg-primary/5 px-2 py-1">
+                  <span className="font-mono text-[10px] text-primary select-text">{Pid}</span>
+                  <button
+                    onClick={() => HandleRemovePlaceId(Pid)}
+                    className="text-primary/40 hover:text-destructive transition-colors"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <span className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest">
+              No place IDs saved — required to authorize CDN downloads.
+            </span>
+          )}
+          <div className="flex items-stretch gap-0">
+            <input
+              type="text"
+              value={NewPlaceId}
+              onChange={(E) => SetNewPlaceId(E.target.value.replace(/\D/g, ''))}
+              onKeyDown={(E) => { if (E.key === 'Enter') HandleAddPlaceId() }}
+              placeholder="Enter place ID..."
+              className="flex-1 border-2 border-r-0 border-border bg-black/50 p-2 font-mono text-xs text-foreground placeholder:text-muted-foreground/30 outline-none focus:border-primary transition-colors"
+            />
+            <CyberButton
+              onClick={HandleAddPlaceId}
+              disabled={!NewPlaceId || SavedPlaceIds.includes(NewPlaceId)}
+            >
+              Add
+            </CyberButton>
+          </div>
+        </div>
+
         <textarea
           value={ManualIds}
           onChange={(E) => SetManualIds(E.target.value)}
@@ -317,7 +388,7 @@ function MenuView({ config, serverStatus }: { config: Config; serverStatus: Serv
           </span>
           <CyberButton
             onClick={HandleManualDownload}
-            disabled={ValidIds.length === 0 || JobState.status === 'processing'}
+            disabled={ValidIds.length === 0 || SavedPlaceIds.length === 0 || JobState.status === 'processing'}
           >
             <Download size={14} />
             Download{ValidIds.length > 0 ? ` ${ValidIds.length} Sound${ValidIds.length === 1 ? '' : 's'}` : ''}
@@ -432,6 +503,7 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
       downloadPath: DownloadPath,
       deleteAfterReupload: Field === 'deleteAfterReupload' ? Val : DeleteAfterReupload,
       reuploadingEnabled: Field === 'reuploadingEnabled' ? Val : ReuploadingEnabled,
+      downloadPlaceIds: config.downloadPlaceIds,
     }
     await window.api.saveConfig(Next)
     onSave(Next)
@@ -444,6 +516,7 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
       downloadPath: DownloadPath,
       deleteAfterReupload: DeleteAfterReupload,
       reuploadingEnabled: ReuploadingEnabled,
+      downloadPlaceIds: config.downloadPlaceIds,
     }
     await window.api.saveConfig(Next)
     onSave(Next)
@@ -1110,7 +1183,7 @@ export default function App() {
   }
 
   const [View, SetView] = useState('menu')
-  const [Config, SetConfig] = useState<Config>({ cookie: '', apiKey: '', downloadPath: '', deleteAfterReupload: false, reuploadingEnabled: true })
+  const [Config, SetConfig] = useState<Config>({ cookie: '', apiKey: '', downloadPath: '', deleteAfterReupload: false, reuploadingEnabled: true, downloadPlaceIds: [] })
   const [ServerStatus, SetServerStatus] = useState<ServerStatus>({ listening: false })
   const [CurrentVersion, SetCurrentVersion] = useState('')
   const [UpdateInfo, SetUpdateInfo] = useState<{ version: string | null; downloadUrl: string | null } | null>(null)
@@ -1260,7 +1333,7 @@ export default function App() {
         <div className="flex-1 overflow-auto p-8 lg:p-12 scrollbar-thin">
           <AnimatePresence mode="wait">
             {View === 'menu' && (
-              <MenuView key="menu" config={Config} serverStatus={ServerStatus} />
+              <MenuView key="menu" config={Config} serverStatus={ServerStatus} onSave={HandleSaveConfig} />
             )}
             {View === 'output' && (
               <OutputView key="output" />

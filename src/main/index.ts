@@ -17,6 +17,7 @@ interface Config {
   downloadPath: string
   deleteAfterReupload: boolean
   reuploadingEnabled: boolean
+  downloadPlaceIds: string[]
 }
 
 interface OutputEntry {
@@ -70,9 +71,10 @@ function LoadConfig(): Config {
       downloadPath: Raw.downloadPath ?? '',
       deleteAfterReupload: Raw.deleteAfterReupload ?? false,
       reuploadingEnabled: Raw.reuploadingEnabled ?? true,
+      downloadPlaceIds: Array.isArray(Raw.downloadPlaceIds) ? Raw.downloadPlaceIds : [],
     }
   } catch {
-    return { cookie: '', apiKey: '', downloadPath: '', deleteAfterReupload: false, reuploadingEnabled: true }
+    return { cookie: '', apiKey: '', downloadPath: '', deleteAfterReupload: false, reuploadingEnabled: true, downloadPlaceIds: [] }
   }
 }
 
@@ -495,7 +497,8 @@ app.whenReady().then(() => {
     if (Ids.length === 0) {
       return { ok: false, error: 'No valid sound IDs found.' }
     }
-    RunJob(Ids, {}, [], 'User', 0, true)
+    const Cfg = LoadConfig()
+    RunJob(Ids, {}, Cfg.downloadPlaceIds, 'User', 0, true)
     return { ok: true, count: Ids.length }
   })
 
