@@ -1,7 +1,31 @@
-# BARB'S SNATCHER - AUDIO REUPLOADER AND DOWNLOADER
+# Barb's Snatcher
 
-This launcher-based system allows you to easily download audio instances from Roblox Studio. All it requires is your cookie, opencloud api key, and the place id of the game you're downloading the sounds from. This system also allows you to reupload the sounds (defaulted to always true if you're downloading via the plugin) so you don't have to upload the sounds and replace the old id with the new one.
+A Roblox sound asset tool for downloading and reuploading audio from your games. Comes with a Windows installer, a built-in launcher that auto-updates, and a Roblox Studio plugin.
 
-It defaults to the basic opencloud api key, but if that can't be used, it uses your cookie (CDN method). It's a fairly simple system with a user-friendly UI for both the app and the plugin.
+## Plugin
 
-Currently it only supports audio downloading - but in the future, I will implement animation reuploading and more. (meshes and video in the future?)
+Install the plugin from the Roblox Creator Store: [BSNATCHER Plugin](https://create.roblox.com/store/asset/99679893270521/BSNATCHER-Plugin)
+
+The plugin source file (`Barb's Snatcher - SOURCE.rbxmx`) is attached to the [latest release](https://github.com/barbecueIs/barbs-snatcher/releases/latest) if you want to host it yourself or inspect the code.
+
+## Getting Started
+
+1. Download and run the installer from the [latest release](https://github.com/barbecueIs/barbs-snatcher/releases/latest)
+2. The launcher will guide you through installation
+3. Open Settings and enter your `.ROBLOSECURITY` cookie and Open Cloud API key
+4. Install the Studio plugin, open it in Roblox Studio, and it connects automatically on port 54321
+
+## What You Need
+
+- `.ROBLOSECURITY` cookie for CDN downloads
+- Open Cloud API key with `asset:read` and `asset:write` permissions for reuploading
+- The place IDs of the games you want to pull sounds from
+
+## Notes
+
+Currently supports audio assets only. Animation reuploading and other asset types may come later.
+
+---
+
+> **Versions v1.0.3 through v1.0.14 are internal development builds and were not intended for public use.**
+> The first public release is **v1.0.15**. Those earlier releases are kept on GitHub for reference but are marked as pre-release.
