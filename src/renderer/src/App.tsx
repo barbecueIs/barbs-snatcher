@@ -731,7 +731,7 @@ function InstallerPage() {
   const [StatusText, SetStatusText] = useState('')
   const [OpenAfter, SetOpenAfter] = useState(true)
   const [CreateShortcut, SetCreateShortcut] = useState(true)
-  const [Screen, SetScreen] = useState<'checking' | 'update' | 'install' | 'installing' | 'done' | 'error'>('checking')
+  const [Screen, SetScreen] = useState<'checking' | 'launching' | 'update' | 'install' | 'installing' | 'done' | 'error'>('checking')
   const [ErrorMessage, SetErrorMessage] = useState('')
   const [UpdateDownloading, SetUpdateDownloading] = useState(false)
   const [UpdateProgress, SetUpdateProgress] = useState(0)
@@ -776,8 +776,14 @@ function InstallerPage() {
     if (HasUpdate) {
       SetScreen('update')
     } else {
+      SetScreen('launching')
       const LaunchRes = await window.api.launchInstalledApp(DefaultPath) as { ok: boolean }
-      if (!LaunchRes.ok) SetScreen('install')
+      if (LaunchRes.ok) {
+        await new Promise<void>((Resolve) => setTimeout(Resolve, 800))
+        window.api.close()
+      } else {
+        SetScreen('install')
+      }
     }
   }, [])
 
@@ -920,6 +926,17 @@ function InstallerPage() {
                 className="w-6 h-6 border-2 border-primary border-t-transparent"
               />
               <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Checking for updates...</span>
+            </div>
+          )}
+
+          {Screen === 'launching' && (
+            <div className="flex flex-col items-center justify-center h-full gap-4">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                className="w-6 h-6 border-2 border-primary border-t-transparent"
+              />
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Launching Barb&apos;s Snatcher...</span>
             </div>
           )}
 

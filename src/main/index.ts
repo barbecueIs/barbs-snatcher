@@ -676,7 +676,6 @@ app.whenReady().then(() => {
       delete Env.PORTABLE_EXECUTABLE_DIR
       delete Env.PORTABLE_EXECUTABLE_APP_FILENAME
       spawn(ExePath, [], { detached: true, stdio: 'ignore', env: Env }).unref()
-      app.quit()
       return { ok: true }
     }
     return { ok: false, error: 'Executable not found.' }
