@@ -388,7 +388,7 @@ function MenuView({ config, serverStatus, onSave }: { config: Config; serverStat
           </span>
           <CyberButton
             onClick={HandleManualDownload}
-            disabled={ValidIds.length === 0 || SavedPlaceIds.length === 0 || JobState.status === 'processing'}
+            disabled={ValidIds.length === 0 || SavedPlaceIds.length === 0 || !config.cookie || JobState.status === 'processing'}
           >
             <Download size={14} />
             Download{ValidIds.length > 0 ? ` ${ValidIds.length} Sound${ValidIds.length === 1 ? '' : 's'}` : ''}
@@ -619,6 +619,12 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
 }
 
 function CreditsView() {
+  const [AppVersion, SetAppVersion] = useState('')
+
+  useEffect(() => {
+    window.api.getAppVersion().then((V) => SetAppVersion(V as string))
+  }, [])
+
   return (
     <motion.div variants={cVar} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-8 w-full max-w-5xl mx-auto">
       <motion.div variants={iVar} className="border-l-4 border-primary pl-6 py-2">
@@ -633,7 +639,7 @@ function CreditsView() {
             <h1 className="font-display font-black text-3xl uppercase tracking-tighter text-white">
               Barb&apos;s <span className="text-primary">Snatcher</span>
             </h1>
-            <p className="font-mono text-[10px] text-primary tracking-[0.3em] mt-1">SOUND ASSET TOOL v1.0.0</p>
+            <p className="font-mono text-[10px] text-primary tracking-[0.3em] mt-1">SOUND ASSET TOOL v{AppVersion || '...'}</p>
           </div>
 
           <div className="border-2 border-border bg-black/50 px-10 py-6 flex flex-col items-center gap-3">
@@ -717,6 +723,7 @@ function InstallerPage() {
   const [ErrorMessage, SetErrorMessage] = useState('')
   const [UpdateDownloading, SetUpdateDownloading] = useState(false)
   const [UpdateProgress, SetUpdateProgress] = useState(0)
+  const [ShowAdvanced, SetShowAdvanced] = useState(false)
 
   const RefreshStatus = useCallback(async (Path: string) => {
     const Res = await window.api.checkInstallStatus(Path)
@@ -733,7 +740,7 @@ function InstallerPage() {
       window.api.getChangelog(),
       Promise.race([
         window.api.checkLatestRelease(),
-        new Promise<null>((Resolve) => setTimeout(() => Resolve(null), 3000)),
+        new Promise<null>((Resolve) => setTimeout(() => Resolve(null), 1500)),
       ]),
     ])
 
@@ -822,8 +829,12 @@ function InstallerPage() {
     }
   }
 
-  const HandleLaunch = () => {
-    window.api.launchInstalledApp(InstallPath)
+  const HandleLaunch = async () => {
+    const Res = await window.api.launchInstalledApp(InstallPath) as { ok: boolean; error?: string }
+    if (!Res.ok) {
+      SetErrorMessage(Res.error || 'Could not launch the app. Try reinstalling.')
+      SetScreen('error')
+    }
   }
 
   const HandleUpdate = async () => {
@@ -980,27 +991,36 @@ function InstallerPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-bold font-display uppercase tracking-widest text-primary flex items-center gap-2">
-                  <ChevronRight size={14} />
-                  Download / nupkg Source (Optional)
-                </label>
-                <div className="flex items-stretch gap-0">
-                  <input
-                    type="text"
-                    placeholder="URL or file path, or leave empty to use built-in files..."
-                    value={SourcePath}
-                    onChange={(E) => SetSourcePath(E.target.value)}
-                    className="flex-1 border-2 border-r-0 border-border bg-black/50 p-2 font-mono text-xs text-foreground placeholder:text-muted-foreground/30 outline-none focus:border-primary transition-colors"
-                  />
-                  <button
-                    onClick={HandleBrowseSource}
-                    className="shrink-0 border-2 border-border bg-black/50 px-4 text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-all font-mono text-[10px] uppercase tracking-widest"
-                  >
-                    Select File
-                  </button>
+              <button
+                onClick={() => SetShowAdvanced((P) => !P)}
+                className="self-start font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              >
+                {ShowAdvanced ? '▾ Hide advanced' : '▸ Advanced'}
+              </button>
+
+              {ShowAdvanced && (
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold font-display uppercase tracking-widest text-primary flex items-center gap-2">
+                    <ChevronRight size={14} />
+                    Download / nupkg Source (Optional)
+                  </label>
+                  <div className="flex items-stretch gap-0">
+                    <input
+                      type="text"
+                      placeholder="URL or file path, or leave empty to use built-in files..."
+                      value={SourcePath}
+                      onChange={(E) => SetSourcePath(E.target.value)}
+                      className="flex-1 border-2 border-r-0 border-border bg-black/50 p-2 font-mono text-xs text-foreground placeholder:text-muted-foreground/30 outline-none focus:border-primary transition-colors"
+                    />
+                    <button
+                      onClick={HandleBrowseSource}
+                      className="shrink-0 border-2 border-border bg-black/50 px-4 text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-all font-mono text-[10px] uppercase tracking-widest"
+                    >
+                      Select File
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="border-2 border-border bg-card p-4">
                 {Status.broken ? (

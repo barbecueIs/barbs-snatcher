@@ -281,8 +281,11 @@ function StartHttpServer(): void {
   HttpServer.listen(ServerPort, '127.0.0.1', () => {
     MainWindow?.webContents.send('server-status', { listening: true, port: ServerPort })
   })
-  HttpServer.on('error', (Err) => {
-    MainWindow?.webContents.send('server-status', { listening: false, error: Err.message })
+  HttpServer.on('error', (Err: NodeJS.ErrnoException) => {
+    const Msg = Err.code === 'EADDRINUSE'
+      ? `Port ${ServerPort} is already in use by another app`
+      : Err.message
+    MainWindow?.webContents.send('server-status', { listening: false, error: Msg })
   })
 }
 
