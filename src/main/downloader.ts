@@ -225,7 +225,7 @@ async function PollOperation(
         return { NewId: Id, Error: Id ? null : 'operation completed but returned no assetId' }
       }
     } catch {
-      // transient network/timeout — keep polling until deadline
+      // transient network/timeout, keep polling until deadline
     }
     await Sleep(POLL_INTERVAL_MS)
   }

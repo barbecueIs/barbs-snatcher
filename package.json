@@ -1,7 +1,7 @@
 {
   "name": "barbs-snatcher",
   "version": "1.0.15",
-  "description": "Barb's Snatcher — Roblox sound asset tool",
+  "description": "Barb's Snatcher, a Roblox sound asset tool",
   "main": "./out/main/index.js",
   "author": "Barbecue",
   "scripts": {

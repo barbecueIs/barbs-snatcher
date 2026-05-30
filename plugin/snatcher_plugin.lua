@@ -17,7 +17,7 @@ local function RunProcess(ScopeMode)
 		return
 	end
 
-	UI.SetStatus("FOUND " .. #Ids .. " IDS — CONNECTING...")
+	UI.SetStatus("FOUND " .. #Ids .. " IDS, CONNECTING...")
 
 	local PostOk = Network.PostSounds(Ids, Names, Config.PlaceIds)
 	if not PostOk then
@@ -37,7 +37,7 @@ local function RunProcess(ScopeMode)
 			if Data.status == "complete" then
 				Done = true
 				Patcher.PatchInstances(Instances, Data.mapping)
-				UI.SetStatus("DONE — " .. (Data.ok or 0) .. " OK, " .. (Data.failed or 0) .. " FAILED")
+				UI.SetStatus("DONE: " .. (Data.ok or 0) .. " OK, " .. (Data.failed or 0) .. " FAILED")
 			elseif Data.status == "error" then
 				Done = true
 				UI.SetStatus("ERROR: " .. (Data.error or "UNKNOWN"))

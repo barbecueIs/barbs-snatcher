@@ -13,7 +13,7 @@
     "date": "2026-05-27",
     "notes": [
       "Uploads now automatically target the group when the game is group-owned and the user has upload permissions",
-      "No configuration required — creator type and ID are detected from the active place at scan time"
+      "No configuration required. Creator type and ID are detected from the active place at scan time"
     ]
   },
   {
@@ -21,7 +21,7 @@
     "date": "2026-05-26",
     "notes": [
       "Fixed CDN failures when scanning folders with many sounds in subdirectories",
-      "Removed place ID field from app settings — managed by the plugin now",
+      "Removed place ID field from app settings, managed by the plugin now",
       "Scanning is now instant (removed sequential marketplace API calls)",
       "Reduced download concurrency to avoid Roblox CDN rate limits"
     ]
