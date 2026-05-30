@@ -31,6 +31,8 @@ squirrelWindows:
   iconUrl: https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/templates/icons/electron.ico
   artifactName: ${name}-${version}-squirrel-setup.${ext}
 npmRebuild: false
+electronFuses:
+  enableEmbeddedAsarIntegrityValidation: false
 publish:
   provider: github
   owner: barbecueIs
