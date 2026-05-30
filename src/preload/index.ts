@@ -23,6 +23,7 @@ const Api = {
   launchInstalledApp: (TargetPath: string) => ipcRenderer.invoke('launch-installed-app', TargetPath),
 
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  validateCookie: (Cookie: string) => ipcRenderer.invoke('validate-cookie', Cookie),
   getDefaultInstallDir: () => ipcRenderer.invoke('get-default-install-dir'),
   downloadAndLaunchUpdate: (Url: string) => ipcRenderer.invoke('download-and-launch-update', Url),
   runDownloadWithoutPlugin: (IdsString: string) => ipcRenderer.invoke('run-download-without-plugin', IdsString),

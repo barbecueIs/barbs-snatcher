@@ -482,6 +482,12 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('get-app-version', () => app.getVersion())
+
+  ipcMain.handle('validate-cookie', async (_E, Cookie: string) => {
+    if (!Cookie) return { valid: false }
+    const Id = await FetchUserId(Cookie)
+    return { valid: Id !== null }
+  })
   ipcMain.handle('get-default-install-dir', () => GetDefaultInstallDir())
   ipcMain.handle('load-config', () => LoadConfig())
   ipcMain.handle('save-config', (_E, Data: Config) => { SaveConfig(Data); return { ok: true } })

@@ -187,6 +187,19 @@ function MenuView({ config, serverStatus, onSave }: { config: Config; serverStat
     SetManualIds('')
   }, [ManualIds, ValidIds.length, SavedPlaceIds.length, JobState.status])
 
+  const [CookieStatus, SetCookieStatus] = useState<'unchecked' | 'valid' | 'invalid'>('unchecked')
+
+  useEffect(() => {
+    if (!config.cookie) {
+      SetCookieStatus('unchecked')
+      return
+    }
+    window.api.validateCookie(config.cookie).then((Res) => {
+      const R = Res as { valid: boolean }
+      SetCookieStatus(R.valid ? 'valid' : 'invalid')
+    })
+  }, [config.cookie])
+
   const CookieOk = !!config.cookie
   const ApiKeyOk = !!config.apiKey
   const NetworkOk = serverStatus.listening
@@ -202,9 +215,9 @@ function MenuView({ config, serverStatus, onSave }: { config: Config; serverStat
         <StatusCard
           icon={Cookie}
           label="Cookie"
-          value={CookieOk ? 'Set' : 'Not Set'}
-          sub={CookieOk ? `${config.cookie.length} chars` : 'required for downloads'}
-          ok={CookieOk}
+          value={!CookieOk ? 'Not Set' : CookieStatus === 'valid' ? 'Valid' : CookieStatus === 'invalid' ? 'Expired' : 'Set'}
+          sub={!CookieOk ? 'required for downloads' : CookieStatus === 'valid' ? 'authenticated' : CookieStatus === 'invalid' ? 'update your cookie in Settings' : 'verifying...'}
+          ok={CookieOk && CookieStatus === 'valid'}
         />
         <StatusCard
           icon={Wifi}
@@ -715,7 +728,6 @@ function InstallerPage() {
   const [Status, SetStatus] = useState<InstallStatus | null>(null)
   const [Changelog, SetChangelog] = useState<ChangelogEntry[]>([])
   const [LatestRelease, SetLatestRelease] = useState<{ version: string | null; downloadUrl: string | null } | null>(null)
-  const [Progress, SetProgress] = useState(0)
   const [StatusText, SetStatusText] = useState('')
   const [OpenAfter, SetOpenAfter] = useState(true)
   const [CreateShortcut, SetCreateShortcut] = useState(true)
@@ -790,19 +802,11 @@ function InstallerPage() {
 
   const RunInstallation = async (Action: 'install' | 'repair' | 'update' | 'reinstall') => {
     SetScreen('installing')
-    SetProgress(10)
     SetStatusText(
       Action === 'repair' ? 'Repairing installation...' :
       Action === 'update' ? 'Updating files...' :
       'Installing files...'
     )
-
-    const Interval = setInterval(() => {
-      SetProgress((Prev) => {
-        if (Prev >= 90) { clearInterval(Interval); return 90 }
-        return Prev + 10
-      })
-    }, 400)
 
     const Result = await window.api.installApp({
       sourcePathOrUrl: SourcePath,
@@ -811,18 +815,15 @@ function InstallerPage() {
       createShortcut: CreateShortcut,
     }) as { ok: boolean; error?: string }
 
-    clearInterval(Interval)
-
     if (Result.ok) {
-      SetProgress(100)
-      SetStatusText('Completed!')
+      SetStatusText('Done!')
       setTimeout(() => {
         if (OpenAfter) {
           window.api.close()
         } else {
           SetScreen('done')
         }
-      }, 1000)
+      }, 800)
     } else {
       SetErrorMessage(Result.error || 'Installation failed.')
       SetScreen('error')
@@ -1050,14 +1051,13 @@ function InstallerPage() {
           )}
 
           {Screen === 'installing' && (
-            <div className="flex flex-col gap-6 justify-center h-full">
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                  <span>{StatusText}</span>
-                  <span>{Progress}%</span>
-                </div>
-                <ProgressBar value={Progress} max={100} />
-              </div>
+            <div className="flex flex-col gap-4 justify-center items-center h-full">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                className="w-6 h-6 border-2 border-primary border-t-transparent"
+              />
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{StatusText}</span>
             </div>
           )}
 
