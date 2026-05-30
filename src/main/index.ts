@@ -7,7 +7,6 @@ import { execSync, spawn } from 'child_process'
 import AdmZip from 'adm-zip'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
-app.commandLine.appendSwitch('no-sandbox')
 import Icon from '../../resources/icon.png?asset'
 import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound, SanitizeName } from './downloader'
 
@@ -44,6 +43,7 @@ interface JobState {
 let MainWindow: BrowserWindow | null = null
 let HttpServer: http.Server | null = null
 const ServerPort = 54321
+const DownloadConcurrency = 8
 
 let State: JobState = {
   status: 'idle',
@@ -156,12 +156,10 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
     return
   }
 
-  const CONCURRENCY = 8
   const Queue = [...Ids]
   const Mapping: Record<string, string> = {}
   const FailReasons: Record<string, number> = {}
   let Done = 0, Ok = 0, Failed = 0
-  const EffPlaceIds = PlaceIds
 
   const BumpReason = (Msg: string | null): void => {
     const Key = (Msg ?? 'unknown error').slice(0, 80)
@@ -181,7 +179,7 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
       const SoundName = SanitizeName(Names[Id] || 'Sound')
       const CleanName = `${Entry.index}_(${SoundName})_${Id}`
 
-      const DlResult = await DownloadSound(Id, SessionDir, Cfg.cookie, CsrfToken, Cfg.apiKey, EffPlaceIds, CleanName)
+      const DlResult = await DownloadSound(Id, SessionDir, Cfg.cookie, CsrfToken, Cfg.apiKey, PlaceIds, CleanName)
 
       if (!DlResult.Ok || !DlResult.FilePath) {
         Done++
@@ -224,7 +222,7 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, Ids.length) }, Worker))
+  await Promise.all(Array.from({ length: Math.min(DownloadConcurrency, Ids.length) }, Worker))
 
   try {
     fs.writeFileSync(join(SessionDir, 'mapping.json'), JSON.stringify(Mapping, null, 2))
@@ -664,8 +662,8 @@ app.whenReady().then(() => {
       }
 
       return { ok: true }
-    } catch (Err: any) {
-      return { ok: false, error: Err.message || 'Unknown error occurred during installation.' }
+    } catch (Err: unknown) {
+      return { ok: false, error: Err instanceof Error ? Err.message : 'Unknown error during installation.' }
     }
   })
 
