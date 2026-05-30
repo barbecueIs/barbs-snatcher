@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="resources/icon.png" width="128" />
+  <img src="bjs.png" width="128" />
   <br><br>
   <a href="https://github.com/barbecueIs/barbs-snatcher/releases/latest">
     <img src="https://img.shields.io/badge/Install-Latest_Release-ccff00?style=for-the-badge&labelColor=0d0d11" />
