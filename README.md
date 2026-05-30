@@ -1,17 +1,11 @@
 <div align="center">
   <img src="bjs.png" width="128" />
   <br><br>
-  <a href="https://github.com/barbecueIs/barbs-snatcher/releases/latest">
-    <img src="https://img.shields.io/badge/Install-Latest_Release-ccff00?style=for-the-badge&labelColor=0d0d11" />
-  </a>
+  <a href="https://github.com/barbecueIs/barbs-snatcher/releases/latest"><img src="https://img.shields.io/badge/Install-Latest_Release-ccff00?style=for-the-badge&labelColor=0d0d11" /></a>
   &nbsp;
-  <a href="https://github.com/barbecueIs/barbs-snatcher/releases">
-    <img src="https://img.shields.io/badge/All-Releases-555555?style=for-the-badge&labelColor=0d0d11" />
-  </a>
+  <a href="https://github.com/barbecueIs/barbs-snatcher/releases"><img src="https://img.shields.io/badge/All-Releases-555555?style=for-the-badge&labelColor=0d0d11" /></a>
   &nbsp;
-  <a href="https://discord.gg/NZqu5zXkub">
-    <img src="https://img.shields.io/badge/Join-Discord-5865F2?style=for-the-badge&labelColor=0d0d11" />
-  </a>
+  <a href="https://discord.gg/NZqu5zXkub"><img src="https://img.shields.io/badge/Join-Discord-5865F2?style=for-the-badge&labelColor=0d0d11" /></a>
 </div>
 
 ---
