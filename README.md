@@ -41,3 +41,9 @@ Currently supports audio assets only. Animation reuploading and other asset type
 
 > **Versions v1.0.3 through v1.0.14 are internal development builds and were not intended for public use.**
 > The first public release is **v1.0.15**. Those earlier releases are kept on GitHub for reference but are marked as pre-release.
+
+## License
+
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
+
+You are free to use, modify, and distribute this software. Any derivative work must remain open source under the same license. See the [LICENSE](LICENSE) file for the full terms.
