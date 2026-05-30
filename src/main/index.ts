@@ -7,6 +7,8 @@ import { execSync, spawn } from 'child_process'
 import AdmZip from 'adm-zip'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
+app.disableHardwareAcceleration()
+
 import Icon from '../../resources/icon.png?asset'
 import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound, SanitizeName } from './downloader'
 
