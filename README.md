@@ -1,10 +1,3 @@
-<div align="center">
-    <br><br>
-    <a href="https://github.com/barbecueIs/barbs-snatcher/releases/latest"><img src="https://img.shields.io/github/downloads/barbecueIs/barbs-snatcher/total?color=green" alt="Latest download" /></a>
-    <a href="https://github.com/barbecueIs/barbs-snatcher/releases/latest"><img src="https://img.shields.io/github/v/release/barbecueIs/barbs-snatcher?color=green" alt="Latest release" /></a>
-    <a href="https://discord.gg/fc5bJQrqap"><img src="https://img.shields.io/discord/1485951951987540048?label=discord&logo=discord&logoColor=white&color=green" alt="Discord" /></a>
-</div>
-
 # Barb's Snatcher
 
 A Roblox sound asset tool for downloading and reuploading audio from your games. Comes with a Windows installer, a built-in launcher that auto-updates, and a Roblox Studio plugin.
