@@ -294,7 +294,7 @@ const IsInstaller =
   app.getPath('exe').toLowerCase().includes('setup') ||
   IsInstallerArg
 
-const GetDefaultInstallDir = (): string => join(app.getPath('home'), 'AppData', 'Local', 'barbs-snatcher')
+const GetDefaultInstallDir = (): string => dirname(app.getPath('exe'))
 
 function CreateShortcut(TargetExe: string, ShortcutPath: string): void {
   const Dir = dirname(ShortcutPath)
