@@ -1,8 +1,8 @@
 <div align="center">
     <br><br>
-    <a href="https://github.com/barbecueIs/barbs-snatcher/releases/latest"><img src="https://img.shields.io/github/downloads/kartfr/Asset-Reuploader/total?color=green" alt="Latest download" /></a>
-    <a href="https://github.com/barbecueIs/barbs-snatcher/releases/latest"><img src="https://img.shields.io/github/v/release/kartfr/Asset-Reuploader?color=green" alt="Latest release" /></a>
-    <a href="https://discord.gg/XTEtUqPTat"><img src="https://img.shields.io/discord/1238572493925646347?label=discord&logo=discord&logoColor=white&color=green" alt="Discord" /></a>
+    <a href="https://github.com/barbecueIs/barbs-snatcher/releases/latest"><img src="https://img.shields.io/github/downloads/barbecueIs/barbs-snatcher/total?color=green" alt="Latest download" /></a>
+    <a href="https://github.com/barbecueIs/barbs-snatcher/releases/latest"><img src="https://img.shields.io/github/v/release/barbecueIs/barbs-snatcher?color=green" alt="Latest release" /></a>
+    <a href="https://discord.gg/fc5bJQrqap"><img src="https://img.shields.io/discord/1238572493925646347?label=discord&logo=discord&logoColor=white&color=green" alt="Discord" /></a>
 </div>
 
 # Barb's Snatcher
