@@ -8,6 +8,7 @@ import AdmZip from 'adm-zip'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
 app.disableHardwareAcceleration()
+app.commandLine.appendSwitch('in-process-gpu')
 
 import Icon from '../../resources/icon.png?asset'
 import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound, SanitizeName } from './downloader'
