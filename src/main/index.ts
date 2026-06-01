@@ -11,7 +11,7 @@ app.disableHardwareAcceleration()
 app.commandLine.appendSwitch('in-process-gpu')
 
 import Icon from '../../resources/icon.png?asset'
-import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound, SanitizeName } from './downloader'
+import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound, SanitizeName, DownloadAnimation, UploadAnimation } from './downloader'
 
 interface Config {
   cookie: string
@@ -49,6 +49,20 @@ const ServerPort = 54321
 const DownloadConcurrency = 8
 
 let State: JobState = {
+  status: 'idle',
+  total: 0,
+  done: 0,
+  ok: 0,
+  failed: 0,
+  mapping: {},
+  error: null,
+  failReasons: {},
+  sessionDir: null,
+  sessionName: null,
+  outputs: [],
+}
+
+let AnimState: JobState = {
   status: 'idle',
   total: 0,
   done: 0,
@@ -113,6 +127,10 @@ function CreateSessionDir(Base: string): string {
 function SetState(Patch: Partial<JobState>): void {
   State = { ...State, ...Patch }
   MainWindow?.webContents.send('job-update', State)
+}
+
+function SetAnimState(Patch: Partial<JobState>): void {
+  AnimState = { ...AnimState, ...Patch }
 }
 
 async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: string[], CreatorType: string, CreatorId: number, DownloadOnly: boolean = false): Promise<void> {
@@ -234,6 +252,125 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
   SetState({ status: 'complete', done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
 }
 
+async function RunAnimationJob(Ids: string[], Names: Record<string, string>, PlaceIds: string[], CreatorType: string, CreatorId: number): Promise<void> {
+  const Cfg = LoadConfig()
+  if (!Cfg.cookie) {
+    SetAnimState({ status: 'error', error: 'No cookie set. Go to Settings and paste your .ROBLOSECURITY cookie.' })
+    return
+  }
+  if (Cfg.reuploadingEnabled && !Cfg.apiKey) {
+    SetAnimState({ status: 'error', error: 'No API key set. Go to Settings and add your Open Cloud API key.' })
+    return
+  }
+
+  const SessionDir = CreateSessionDir(Cfg.downloadPath || DefaultDownloadsBase())
+  const SessionName = basename(SessionDir)
+
+  const Outputs: OutputEntry[] = Ids.map((Id, Index) => ({
+    index: Index + 1,
+    oldId: Id,
+    newId: 'Pending',
+    status: 'Waiting...',
+  }))
+
+  SetAnimState({
+    status: 'processing',
+    total: Ids.length,
+    done: 0,
+    ok: 0,
+    failed: 0,
+    mapping: {},
+    error: null,
+    failReasons: {},
+    sessionDir: SessionDir,
+    sessionName: SessionName,
+    outputs: Outputs,
+  })
+
+  const CsrfToken = await FetchCsrfToken(Cfg.cookie)
+  const ShouldUpload = Cfg.reuploadingEnabled
+  const UserId = ShouldUpload ? await FetchUserId(Cfg.cookie) : null
+
+  if (ShouldUpload && !UserId) {
+    SetAnimState({ status: 'error', error: 'Could not resolve user ID from cookie. Cookie may be expired.' })
+    return
+  }
+
+  const Queue = [...Ids]
+  const Mapping: Record<string, string> = {}
+  const FailReasons: Record<string, number> = {}
+  let Done = 0, Ok = 0, Failed = 0
+
+  const BumpReason = (Msg: string | null): void => {
+    const Key = (Msg ?? 'unknown error').slice(0, 80)
+    FailReasons[Key] = (FailReasons[Key] ?? 0) + 1
+  }
+
+  const Worker = async (): Promise<void> => {
+    while (Queue.length > 0) {
+      const Id = Queue.shift()
+      if (!Id) break
+
+      const Index = Ids.indexOf(Id)
+      const Entry = Outputs[Index]
+      Entry.status = 'Downloading...'
+      SetAnimState({ outputs: [...Outputs] })
+
+      const AnimName = SanitizeName(Names[Id] || 'Animation')
+      const CleanName = `${Entry.index}_(${AnimName})_${Id}`
+
+      const DlResult = await DownloadAnimation(Id, SessionDir, Cfg.cookie, CsrfToken, Cfg.apiKey, PlaceIds, CleanName)
+
+      if (!DlResult.Ok || !DlResult.FilePath) {
+        Done++
+        Failed++
+        BumpReason(`[download] ${DlResult.Error}`)
+        Entry.newId = 'Failed'
+        Entry.status = `[download] ${DlResult.Error}`
+        SetAnimState({ done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
+        continue
+      }
+
+      if (ShouldUpload) {
+        Entry.status = 'Uploading...'
+        SetAnimState({ outputs: [...Outputs] })
+
+        const UlResult = await UploadAnimation(DlResult.FilePath, Id, Cfg.apiKey, UserId ?? 0, CreatorType, CreatorId)
+
+        Done++
+        if (UlResult.Ok && UlResult.NewId) {
+          Ok++
+          Mapping[Id] = UlResult.NewId
+          Entry.newId = UlResult.NewId
+          Entry.status = 'Success'
+          if (Cfg.deleteAfterReupload) {
+            try { fs.unlinkSync(DlResult.FilePath) } catch {}
+          }
+        } else {
+          Failed++
+          BumpReason(`[upload] ${UlResult.Error}`)
+          Entry.newId = 'Failed'
+          Entry.status = `[upload] ${UlResult.Error}`
+        }
+      } else {
+        Done++
+        Ok++
+        Entry.newId = '-'
+        Entry.status = 'Downloaded'
+      }
+      SetAnimState({ done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(DownloadConcurrency, Ids.length) }, Worker))
+
+  try {
+    fs.writeFileSync(join(SessionDir, 'anim-mapping.json'), JSON.stringify(Mapping, null, 2))
+  } catch {}
+
+  SetAnimState({ status: 'complete', done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
+}
+
 function HandleRequest(Req: http.IncomingMessage, Res: http.ServerResponse): void {
   Res.setHeader('Access-Control-Allow-Origin', '*')
   Res.setHeader('Content-Type', 'application/json')
@@ -270,6 +407,41 @@ function HandleRequest(Req: http.IncomingMessage, Res: http.ServerResponse): voi
   if (Req.method === 'GET' && Req.url === '/sounds-status') {
     Res.writeHead(200)
     Res.end(JSON.stringify(State))
+    return
+  }
+
+  if (Req.method === 'POST' && Req.url === '/animations-process') {
+    if (AnimState.status === 'processing') {
+      Res.writeHead(409)
+      Res.end(JSON.stringify({ error: 'animation job already running' }))
+      return
+    }
+
+    let Body = ''
+    Req.on('data', (Chunk) => { Body += Chunk })
+    Req.on('end', () => {
+      try {
+        const Data = JSON.parse(Body) as { ids?: string[]; names?: Record<string, string>; placeIds?: string[]; creatorType?: string; creatorId?: number }
+        const Ids = (Data.ids ?? []).filter((Id) => /^\d+$/.test(Id))
+        if (Ids.length === 0) {
+          Res.writeHead(400)
+          Res.end(JSON.stringify({ error: 'no valid IDs received' }))
+          return
+        }
+        Res.writeHead(200)
+        Res.end(JSON.stringify({ ok: true, count: Ids.length }))
+        RunAnimationJob(Ids, Data.names ?? {}, Data.placeIds ?? [], Data.creatorType ?? 'User', Data.creatorId ?? 0)
+      } catch {
+        Res.writeHead(400)
+        Res.end(JSON.stringify({ error: 'invalid JSON' }))
+      }
+    })
+    return
+  }
+
+  if (Req.method === 'GET' && Req.url === '/animations-status') {
+    Res.writeHead(200)
+    Res.end(JSON.stringify(AnimState))
     return
   }
 
