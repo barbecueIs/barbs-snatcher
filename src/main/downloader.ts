@@ -201,8 +201,8 @@ function DetectAnimationExt(Buf: Buffer): string {
 }
 
 const ANIM_MIME_MAP: Record<string, string> = {
-  rbxmx: 'application/octet-stream',
-  rbxm: 'application/octet-stream',
+  rbxmx: 'model/x-rbxm',
+  rbxm: 'model/x-rbxm',
 }
 
 async function FetchAny(Url: string, Headers: Record<string, string>): Promise<Buffer | null> {
@@ -313,7 +313,7 @@ export async function UploadAnimation(
       : { userId: UserId }
 
     const ReqJson = JSON.stringify({
-      assetType: 'Model',
+      assetType: 'Animation',
       displayName: `anim_${OldId}`,
       description: '',
       creationContext: { creator: Creator },
