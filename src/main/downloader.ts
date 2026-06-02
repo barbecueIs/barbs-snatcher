@@ -297,43 +297,29 @@ export async function DownloadAnimation(
 export async function UploadAnimation(
   FilePath: string,
   OldId: string,
-  ApiKey: string,
-  UserId: number,
   CreatorType: string,
-  CreatorId: number
+  CreatorId: number,
+  Cookie: string,
+  CsrfToken: string
 ): Promise<{ Ok: boolean; NewId: string | null; Error: string | null }> {
   try {
     const FileData = fs.readFileSync(FilePath)
     const Ext = path.extname(FilePath).slice(1).toLowerCase()
     const MimeType = ANIM_MIME_MAP[Ext] ?? 'application/octet-stream'
+    const C = SanitizeCookie(Cookie)
 
-    const Creator = CreatorType === 'Group' && CreatorId > 0
-      ? { groupId: CreatorId }
-      : { userId: UserId }
+    const GroupParam = CreatorType === 'Group' && CreatorId > 0 ? `&groupId=${CreatorId}` : ''
+    const UploadUrl = `https://data.roblox.com/Data/Upload.ashx?assetid=0&type=16&name=anim_${OldId}&description=${GroupParam}`
 
-    const ReqJson = JSON.stringify({
-      assetType: 'Animation',
-      displayName: `anim_${OldId}`,
-      description: '',
-      creationContext: { creator: Creator },
-    })
-
-    const Form = new FormData()
-    Form.append('request', ReqJson, { contentType: 'application/json' })
-    Form.append('fileContent', FileData, {
-      filename: `anim_${OldId}.${Ext}`,
-      contentType: MimeType,
-    })
-
-    const FormBuffer = Form.getBuffer()
-    const Res = await fetch('https://apis.roblox.com/assets/v1/assets', {
+    const Res = await fetch(UploadUrl, {
       method: 'POST',
       headers: {
-        'x-api-key': ApiKey,
-        ...Form.getHeaders(),
-        'Content-Length': FormBuffer.length.toString(),
+        'Cookie': `.ROBLOSECURITY=${C}`,
+        'x-csrf-token': CsrfToken,
+        'Content-Type': MimeType,
+        'User-Agent': 'Roblox/WinInet',
       },
-      body: FormBuffer,
+      body: FileData,
       signal: AbortSignal.timeout(30000)
     })
 
@@ -342,14 +328,12 @@ export async function UploadAnimation(
       return { Ok: false, NewId: null, Error: `HTTP ${Res.status}: ${ErrText.slice(0, 120)}` }
     }
 
-    const Body = (await Res.json()) as { path?: string }
-    const OpPath = Body.path
-    if (!OpPath) return { Ok: false, NewId: null, Error: 'no operation path in response' }
+    const NewId = (await Res.text()).trim()
+    if (!/^\d+$/.test(NewId)) {
+      return { Ok: false, NewId: null, Error: `Unexpected response: ${NewId.slice(0, 80)}` }
+    }
 
-    const PollResult = await PollOperation(OpPath, ApiKey)
-    if (!PollResult.NewId) return { Ok: false, NewId: null, Error: PollResult.Error }
-
-    return { Ok: true, NewId: PollResult.NewId, Error: null }
+    return { Ok: true, NewId, Error: null }
   } catch (Err: unknown) {
     return { Ok: false, NewId: null, Error: Err instanceof Error ? Err.message : 'unknown error' }
   }
