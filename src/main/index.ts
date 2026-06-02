@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
 import { join, basename, dirname, resolve, normalize } from 'path'
 import * as fs from 'fs'
+import * as os from 'os'
 import * as http from 'http'
 import * as https from 'https'
 import { execSync, spawn } from 'child_process'
@@ -19,6 +20,7 @@ interface Config {
   downloadPath: string
   deleteAfterReupload: boolean
   reuploadingEnabled: boolean
+  fastReuploading: boolean
   downloadPlaceIds: string[]
 }
 
@@ -88,10 +90,11 @@ function LoadConfig(): Config {
       downloadPath: Raw.downloadPath ?? '',
       deleteAfterReupload: Raw.deleteAfterReupload ?? false,
       reuploadingEnabled: Raw.reuploadingEnabled ?? true,
+      fastReuploading: Raw.fastReuploading ?? false,
       downloadPlaceIds: Array.isArray(Raw.downloadPlaceIds) ? Raw.downloadPlaceIds : [],
     }
   } catch {
-    return { cookie: '', apiKey: '', downloadPath: '', deleteAfterReupload: false, reuploadingEnabled: true, downloadPlaceIds: [] }
+    return { cookie: '', apiKey: '', downloadPath: '', deleteAfterReupload: false, reuploadingEnabled: true, fastReuploading: false, downloadPlaceIds: [] }
   }
 }
 
@@ -140,13 +143,16 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
     SetState({ status: 'error', error: 'No cookie set. Go to Settings and paste your .ROBLOSECURITY cookie.' })
     return
   }
-  if (!DownloadOnly && !Cfg.apiKey) {
+  if (!DownloadOnly && !Cfg.fastReuploading && !Cfg.apiKey) {
     SetState({ status: 'error', error: 'No API key set. Go to Settings and add your Open Cloud API key.' })
     return
   }
 
-  const SessionDir = CreateSessionDir(Cfg.downloadPath || DefaultDownloadsBase())
-  const SessionName = basename(SessionDir)
+  const FastMode = !DownloadOnly && Cfg.fastReuploading
+  const SessionDir = FastMode
+    ? fs.mkdtempSync(join(os.tmpdir(), 'bsnatcher-fast-'))
+    : CreateSessionDir(Cfg.downloadPath || DefaultDownloadsBase())
+  const SessionName = FastMode ? null : basename(SessionDir)
 
   const Outputs: OutputEntry[] = Ids.map((Id, Index) => ({
     index: Index + 1,
@@ -170,7 +176,7 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
   })
 
   const CsrfToken = await FetchCsrfToken(Cfg.cookie)
-  const ShouldUpload = !DownloadOnly && Cfg.reuploadingEnabled
+  const ShouldUpload = !DownloadOnly && (Cfg.reuploadingEnabled || FastMode)
   const UserId = ShouldUpload ? await FetchUserId(Cfg.cookie) : null
 
   if (ShouldUpload && !UserId) {
@@ -225,7 +231,7 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
           Mapping[Id] = UlResult.NewId
           Entry.newId = UlResult.NewId
           Entry.status = 'Success'
-          if (Cfg.deleteAfterReupload) {
+          if (FastMode || Cfg.deleteAfterReupload) {
             try { fs.unlinkSync(DlResult.FilePath) } catch {}
           }
         } else {
@@ -244,11 +250,16 @@ async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: st
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(DownloadConcurrency, Ids.length) }, Worker))
+  const Concurrency = FastMode ? 24 : DownloadConcurrency
+  await Promise.all(Array.from({ length: Math.min(Concurrency, Ids.length) }, Worker))
 
-  try {
-    fs.writeFileSync(join(SessionDir, 'mapping.json'), JSON.stringify(Mapping, null, 2))
-  } catch {}
+  if (FastMode) {
+    try { fs.rmSync(SessionDir, { recursive: true, force: true }) } catch {}
+  } else {
+    try {
+      fs.writeFileSync(join(SessionDir, 'mapping.json'), JSON.stringify(Mapping, null, 2))
+    } catch {}
+  }
 
   SetState({ status: 'complete', done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
 }
@@ -259,13 +270,16 @@ async function RunAnimationJob(Ids: string[], Names: Record<string, string>, Pla
     SetAnimState({ status: 'error', error: 'No cookie set. Go to Settings and paste your .ROBLOSECURITY cookie.' })
     return
   }
-  if (Cfg.reuploadingEnabled && !Cfg.apiKey) {
+  if (!Cfg.fastReuploading && Cfg.reuploadingEnabled && !Cfg.apiKey) {
     SetAnimState({ status: 'error', error: 'No API key set. Go to Settings and add your Open Cloud API key.' })
     return
   }
 
-  const SessionDir = CreateSessionDir(Cfg.downloadPath || DefaultDownloadsBase())
-  const SessionName = basename(SessionDir)
+  const FastMode = Cfg.fastReuploading
+  const SessionDir = FastMode
+    ? fs.mkdtempSync(join(os.tmpdir(), 'bsnatcher-fast-'))
+    : CreateSessionDir(Cfg.downloadPath || DefaultDownloadsBase())
+  const SessionName = FastMode ? null : basename(SessionDir)
 
   const Outputs: OutputEntry[] = Ids.map((Id, Index) => ({
     index: Index + 1,
@@ -289,7 +303,7 @@ async function RunAnimationJob(Ids: string[], Names: Record<string, string>, Pla
   })
 
   const CsrfToken = await FetchCsrfToken(Cfg.cookie)
-  const ShouldUpload = Cfg.reuploadingEnabled
+  const ShouldUpload = Cfg.reuploadingEnabled || FastMode
   const UserId = ShouldUpload ? await FetchUserId(Cfg.cookie) : null
 
   if (ShouldUpload && !UserId) {
@@ -344,7 +358,7 @@ async function RunAnimationJob(Ids: string[], Names: Record<string, string>, Pla
           Mapping[Id] = UlResult.NewId
           Entry.newId = UlResult.NewId
           Entry.status = 'Success'
-          if (Cfg.deleteAfterReupload) {
+          if (FastMode || Cfg.deleteAfterReupload) {
             try { fs.unlinkSync(DlResult.FilePath) } catch {}
           }
         } else {
@@ -363,11 +377,16 @@ async function RunAnimationJob(Ids: string[], Names: Record<string, string>, Pla
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(DownloadConcurrency, Ids.length) }, Worker))
+  const Concurrency = FastMode ? 24 : DownloadConcurrency
+  await Promise.all(Array.from({ length: Math.min(Concurrency, Ids.length) }, Worker))
 
-  try {
-    fs.writeFileSync(join(SessionDir, 'anim-mapping.json'), JSON.stringify(Mapping, null, 2))
-  } catch {}
+  if (FastMode) {
+    try { fs.rmSync(SessionDir, { recursive: true, force: true }) } catch {}
+  } else {
+    try {
+      fs.writeFileSync(join(SessionDir, 'anim-mapping.json'), JSON.stringify(Mapping, null, 2))
+    } catch {}
+  }
 
   SetAnimState({ status: 'complete', done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
 }

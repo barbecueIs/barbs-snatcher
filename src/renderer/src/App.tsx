@@ -18,7 +18,7 @@ const iVar = {
   show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 320, damping: 26 } },
 }
 
-interface Config { cookie: string; apiKey: string; downloadPath: string; deleteAfterReupload: boolean; reuploadingEnabled: boolean; downloadPlaceIds: string[] }
+interface Config { cookie: string; apiKey: string; downloadPath: string; deleteAfterReupload: boolean; reuploadingEnabled: boolean; fastReuploading: boolean; downloadPlaceIds: string[] }
 interface ServerStatus { listening: boolean; port?: number; error?: string }
 
 function CyberButton({
@@ -482,6 +482,7 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
   const [DownloadPath, SetDownloadPath] = useState(config.downloadPath)
   const [DeleteAfterReupload, SetDeleteAfterReupload] = useState(config.deleteAfterReupload)
   const [ReuploadingEnabled, SetReuploadingEnabled] = useState(config.reuploadingEnabled)
+  const [FastReuploading, SetFastReuploading] = useState(config.fastReuploading)
 
   useEffect(() => {
     SetDownloadPath(config.downloadPath)
@@ -490,7 +491,8 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
   useEffect(() => {
     SetDeleteAfterReupload(config.deleteAfterReupload)
     SetReuploadingEnabled(config.reuploadingEnabled)
-  }, [config.deleteAfterReupload, config.reuploadingEnabled])
+    SetFastReuploading(config.fastReuploading)
+  }, [config.deleteAfterReupload, config.reuploadingEnabled, config.fastReuploading])
   const [EffectivePath, SetEffectivePath] = useState('')
   const [Saved, SetSaved] = useState(false)
 
@@ -507,20 +509,25 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
     SetDownloadPath('')
   }, [])
 
-  const HandleToggle = useCallback(async (Field: 'deleteAfterReupload' | 'reuploadingEnabled', Val: boolean) => {
-    if (Field === 'deleteAfterReupload') SetDeleteAfterReupload(Val)
-    else SetReuploadingEnabled(Val)
+  const HandleToggle = useCallback(async (Field: 'deleteAfterReupload' | 'reuploadingEnabled' | 'fastReuploading', Val: boolean) => {
+    const NewDeleteAfterReupload = Field === 'deleteAfterReupload' ? Val : DeleteAfterReupload
+    const NewReuploadingEnabled = Field === 'reuploadingEnabled' ? Val : (Field === 'fastReuploading' && Val ? false : ReuploadingEnabled)
+    const NewFastReuploading = Field === 'fastReuploading' ? Val : (Field === 'reuploadingEnabled' && Val ? false : FastReuploading)
+    SetDeleteAfterReupload(NewDeleteAfterReupload)
+    SetReuploadingEnabled(NewReuploadingEnabled)
+    SetFastReuploading(NewFastReuploading)
     const Next: Config = {
       cookie: config.cookie,
       apiKey: config.apiKey,
       downloadPath: DownloadPath,
-      deleteAfterReupload: Field === 'deleteAfterReupload' ? Val : DeleteAfterReupload,
-      reuploadingEnabled: Field === 'reuploadingEnabled' ? Val : ReuploadingEnabled,
+      deleteAfterReupload: NewDeleteAfterReupload,
+      reuploadingEnabled: NewReuploadingEnabled,
+      fastReuploading: NewFastReuploading,
       downloadPlaceIds: config.downloadPlaceIds,
     }
     await window.api.saveConfig(Next)
     onSave(Next)
-  }, [config, DownloadPath, DeleteAfterReupload, ReuploadingEnabled, onSave])
+  }, [config, DownloadPath, DeleteAfterReupload, ReuploadingEnabled, FastReuploading, onSave])
 
   const HandleSave = useCallback(async () => {
     const Next: Config = {
@@ -529,6 +536,7 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
       downloadPath: DownloadPath,
       deleteAfterReupload: DeleteAfterReupload,
       reuploadingEnabled: ReuploadingEnabled,
+      fastReuploading: FastReuploading,
       downloadPlaceIds: config.downloadPlaceIds,
     }
     await window.api.saveConfig(Next)
@@ -546,12 +554,18 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
         <p className="text-muted-foreground mt-2 font-mono text-sm">Configure your credentials and download settings.</p>
       </motion.div>
 
-      <motion.div variants={iVar} className="grid grid-cols-2 gap-6">
+      <motion.div variants={iVar} className="grid grid-cols-3 gap-6">
         <ToggleCard
           label="Reuploading Enabled"
-          description="When off, sounds are downloaded but not uploaded or replaced in-game"
+          description="Downloads and reuploads assets, keeping session files on disk"
           value={ReuploadingEnabled}
           onChange={(V) => HandleToggle('reuploadingEnabled', V)}
+        />
+        <ToggleCard
+          label="Fast Reuploading"
+          description="3x more concurrent workers, no session folder, files deleted immediately — mutually exclusive with Reuploading Enabled"
+          value={FastReuploading}
+          onChange={(V) => HandleToggle('fastReuploading', V)}
         />
         <ToggleCard
           label="Delete After Reupload"
@@ -1220,7 +1234,7 @@ export default function App() {
   }
 
   const [View, SetView] = useState('menu')
-  const [Config, SetConfig] = useState<Config>({ cookie: '', apiKey: '', downloadPath: '', deleteAfterReupload: false, reuploadingEnabled: true, downloadPlaceIds: [] })
+  const [Config, SetConfig] = useState<Config>({ cookie: '', apiKey: '', downloadPath: '', deleteAfterReupload: false, reuploadingEnabled: true, fastReuploading: false, downloadPlaceIds: [] })
   const [ServerStatus, SetServerStatus] = useState<ServerStatus>({ listening: false })
   const [CurrentVersion, SetCurrentVersion] = useState('')
   const [UpdateInfo, SetUpdateInfo] = useState<{ version: string | null; downloadUrl: string | null } | null>(null)
