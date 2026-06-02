@@ -309,7 +309,7 @@ export async function UploadAnimation(
     const C = SanitizeCookie(Cookie)
 
     const GroupParam = CreatorType === 'Group' && CreatorId > 0 ? `&groupId=${CreatorId}` : ''
-    const UploadUrl = `https://www.roblox.com/Data/Upload.ashx?assetid=0&type=24&name=anim_${OldId}&description=${GroupParam}`
+    const UploadUrl = `https://www.roblox.com/asset/?assetid=0&type=24&name=anim_${OldId}&description=${GroupParam}`
 
     const Res = await fetch(UploadUrl, {
       method: 'POST',
