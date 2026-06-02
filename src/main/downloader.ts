@@ -201,7 +201,7 @@ function DetectAnimationExt(Buf: Buffer): string {
 }
 
 const ANIM_MIME_MAP: Record<string, string> = {
-  rbxmx: 'application/xml',
+  rbxmx: 'application/octet-stream',
   rbxm: 'application/octet-stream',
 }
 
@@ -298,55 +298,59 @@ export async function DownloadAnimation(
 export async function UploadAnimation(
   FilePath: string,
   OldId: string,
+  ApiKey: string,
+  UserId: number,
   CreatorType: string,
-  CreatorId: number,
-  Cookie: string,
-  CsrfToken: string
+  CreatorId: number
 ): Promise<{ Ok: boolean; NewId: string | null; Error: string | null }> {
   try {
     const FileData = fs.readFileSync(FilePath)
     const Ext = path.extname(FilePath).slice(1).toLowerCase()
     const MimeType = ANIM_MIME_MAP[Ext] ?? 'application/octet-stream'
-    const C = SanitizeCookie(Cookie)
 
-    const QueryString = `assetid=0&type=Animation&name=anim_${OldId}&description=`
-    const UploadResult = await new Promise<{ Status: number; Body: string }>((Resolve, Reject) => {
-      const Req = https.request(
-        {
-          hostname: 'data.roblox.com',
-          path: `/Data/Upload.ashx?${QueryString}`,
-          method: 'POST',
-          headers: {
-            'Cookie': `.ROBLOSECURITY=${C}`,
-            'x-csrf-token': CsrfToken,
-            'Content-Type': MimeType,
-            'User-Agent': 'Roblox/WinInet',
-            'Content-Length': FileData.length,
-          },
-        },
-        (Res) => {
-          const Chunks: Buffer[] = []
-          Res.on('data', (Chunk: Buffer) => Chunks.push(Chunk))
-          Res.on('end', () => Resolve({ Status: Res.statusCode ?? 0, Body: Buffer.concat(Chunks).toString() }))
-          Res.on('error', Reject)
-        }
-      )
-      Req.setTimeout(30000, () => { Req.destroy(); Reject(new Error('upload timed out')) })
-      Req.on('error', Reject)
-      Req.write(FileData)
-      Req.end()
+    const Creator = CreatorType === 'Group' && CreatorId > 0
+      ? { groupId: CreatorId }
+      : { userId: UserId }
+
+    const ReqJson = JSON.stringify({
+      assetType: 'Animation',
+      displayName: `anim_${OldId}`,
+      description: '',
+      creationContext: { creator: Creator },
     })
 
-    if (UploadResult.Status < 200 || UploadResult.Status >= 300) {
-      return { Ok: false, NewId: null, Error: `HTTP ${UploadResult.Status}: ${UploadResult.Body.slice(0, 120)}` }
+    const Form = new FormData()
+    Form.append('request', ReqJson, { contentType: 'application/json' })
+    Form.append('fileContent', FileData, {
+      filename: `anim_${OldId}.${Ext}`,
+      contentType: MimeType,
+    })
+
+    const FormBuffer = Form.getBuffer()
+    const Res = await fetch('https://apis.roblox.com/assets/v1/assets', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ApiKey,
+        ...Form.getHeaders(),
+        'Content-Length': FormBuffer.length.toString(),
+      },
+      body: FormBuffer,
+      signal: AbortSignal.timeout(30000)
+    })
+
+    if (!Res.ok) {
+      const ErrText = await Res.text().catch(() => '')
+      return { Ok: false, NewId: null, Error: `HTTP ${Res.status}: ${ErrText.slice(0, 120)}` }
     }
 
-    const NewId = UploadResult.Body.trim()
-    if (!/^\d+$/.test(NewId)) {
-      return { Ok: false, NewId: null, Error: `Unexpected response: ${NewId.slice(0, 80)}` }
-    }
+    const Body = (await Res.json()) as { path?: string }
+    const OpPath = Body.path
+    if (!OpPath) return { Ok: false, NewId: null, Error: 'no operation path in response' }
 
-    return { Ok: true, NewId, Error: null }
+    const PollResult = await PollOperation(OpPath, ApiKey)
+    if (!PollResult.NewId) return { Ok: false, NewId: null, Error: PollResult.Error }
+
+    return { Ok: true, NewId: PollResult.NewId, Error: null }
   } catch (Err: unknown) {
     const Msg = Err instanceof Error ? Err.message : 'unknown error'
     const Cause = Err instanceof Error && (Err as NodeJS.ErrnoException).cause ? String((Err as NodeJS.ErrnoException).cause) : ''

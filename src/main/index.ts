@@ -259,6 +259,10 @@ async function RunAnimationJob(Ids: string[], Names: Record<string, string>, Pla
     SetAnimState({ status: 'error', error: 'No cookie set. Go to Settings and paste your .ROBLOSECURITY cookie.' })
     return
   }
+  if (Cfg.reuploadingEnabled && !Cfg.apiKey) {
+    SetAnimState({ status: 'error', error: 'No API key set. Go to Settings and add your Open Cloud API key.' })
+    return
+  }
 
   const SessionDir = CreateSessionDir(Cfg.downloadPath || DefaultDownloadsBase())
   const SessionName = basename(SessionDir)
@@ -332,7 +336,7 @@ async function RunAnimationJob(Ids: string[], Names: Record<string, string>, Pla
         Entry.status = 'Uploading...'
         SetAnimState({ outputs: [...Outputs] })
 
-        const UlResult = await UploadAnimation(DlResult.FilePath, Id, CreatorType, CreatorId, Cfg.cookie, CsrfToken)
+        const UlResult = await UploadAnimation(DlResult.FilePath, Id, Cfg.apiKey, UserId ?? 0, CreatorType, CreatorId)
 
         Done++
         if (UlResult.Ok && UlResult.NewId) {
