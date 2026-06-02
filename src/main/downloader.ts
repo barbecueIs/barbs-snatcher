@@ -308,18 +308,29 @@ export async function UploadAnimation(
     const MimeType = ANIM_MIME_MAP[Ext] ?? 'application/octet-stream'
     const C = SanitizeCookie(Cookie)
 
-    const GroupParam = CreatorType === 'Group' && CreatorId > 0 ? `&groupId=${CreatorId}` : ''
-    const UploadUrl = `https://www.roblox.com/asset/?assetid=0&type=24&name=anim_${OldId}&description=${GroupParam}`
+    const Form = new FormData()
+    Form.append('name', `anim_${OldId}`)
+    Form.append('description', '')
+    Form.append('assetType', 'Animation')
+    Form.append('isPublic', 'false')
+    Form.append('allowComments', 'false')
+    Form.append('genres', 'All')
+    if (CreatorType === 'Group' && CreatorId > 0) {
+      Form.append('groupId', String(CreatorId))
+    }
+    Form.append('uploadFile', FileData, { filename: `anim_${OldId}.${Ext}`, contentType: MimeType })
 
-    const Res = await fetch(UploadUrl, {
+    const FormBuffer = Form.getBuffer()
+    const Res = await fetch('https://itemconfiguration.roblox.com/v1/creations/upload', {
       method: 'POST',
       headers: {
         'Cookie': `.ROBLOSECURITY=${C}`,
         'x-csrf-token': CsrfToken,
-        'Content-Type': MimeType,
         'User-Agent': 'Roblox/WinInet',
+        ...Form.getHeaders(),
+        'Content-Length': FormBuffer.length.toString(),
       },
-      body: FileData,
+      body: FormBuffer,
       signal: AbortSignal.timeout(30000)
     })
 
@@ -328,9 +339,10 @@ export async function UploadAnimation(
       return { Ok: false, NewId: null, Error: `HTTP ${Res.status}: ${ErrText.slice(0, 120)}` }
     }
 
-    const NewId = (await Res.text()).trim()
-    if (!/^\d+$/.test(NewId)) {
-      return { Ok: false, NewId: null, Error: `Unexpected response: ${NewId.slice(0, 80)}` }
+    const Body = await Res.json() as { assetId?: number }
+    const NewId = Body.assetId?.toString() ?? null
+    if (!NewId) {
+      return { Ok: false, NewId: null, Error: `No assetId in response: ${JSON.stringify(Body).slice(0, 80)}` }
     }
 
     return { Ok: true, NewId, Error: null }
