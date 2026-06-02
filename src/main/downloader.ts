@@ -313,7 +313,7 @@ export async function UploadAnimation(
       : { userId: UserId }
 
     const ReqJson = JSON.stringify({
-      assetType: 'Animation',
+      assetType: 'Model',
       displayName: `anim_${OldId}`,
       description: '',
       creationContext: { creator: Creator },
