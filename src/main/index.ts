@@ -131,6 +131,7 @@ function SetState(Patch: Partial<JobState>): void {
 
 function SetAnimState(Patch: Partial<JobState>): void {
   AnimState = { ...AnimState, ...Patch }
+  MainWindow?.webContents.send('job-update', AnimState)
 }
 
 async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: string[], CreatorType: string, CreatorId: number, DownloadOnly: boolean = false): Promise<void> {

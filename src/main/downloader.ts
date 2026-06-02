@@ -309,7 +309,7 @@ export async function UploadAnimation(
     const C = SanitizeCookie(Cookie)
 
     const GroupParam = CreatorType === 'Group' && CreatorId > 0 ? `&groupId=${CreatorId}` : ''
-    const UploadUrl = `https://data.roblox.com/Data/Upload.ashx?assetid=0&type=16&name=anim_${OldId}&description=${GroupParam}`
+    const UploadUrl = `https://www.roblox.com/Data/Upload.ashx?assetid=0&type=24&name=anim_${OldId}&description=${GroupParam}`
 
     const Res = await fetch(UploadUrl, {
       method: 'POST',
@@ -335,7 +335,9 @@ export async function UploadAnimation(
 
     return { Ok: true, NewId, Error: null }
   } catch (Err: unknown) {
-    return { Ok: false, NewId: null, Error: Err instanceof Error ? Err.message : 'unknown error' }
+    const Msg = Err instanceof Error ? Err.message : 'unknown error'
+    const Cause = Err instanceof Error && (Err as NodeJS.ErrnoException).cause ? String((Err as NodeJS.ErrnoException).cause) : ''
+    return { Ok: false, NewId: null, Error: Cause ? `${Msg}: ${Cause}` : Msg }
   }
 }
 
