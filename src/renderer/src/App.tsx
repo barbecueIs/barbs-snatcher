@@ -554,19 +554,21 @@ function SettingsView({ config, onSave }: { config: Config; onSave: (c: Config) 
         <p className="text-muted-foreground mt-2 font-mono text-sm">Configure your credentials and download settings.</p>
       </motion.div>
 
-      <motion.div variants={iVar} className="grid grid-cols-3 gap-6">
-        <ToggleCard
-          label="Reuploading Enabled"
-          description="Downloads and reuploads assets, keeping session files on disk"
-          value={ReuploadingEnabled}
-          onChange={(V) => HandleToggle('reuploadingEnabled', V)}
-        />
-        <ToggleCard
-          label="Fast Reuploading"
-          description="3x more concurrent workers, no session folder, files deleted immediately — mutually exclusive with Reuploading Enabled"
-          value={FastReuploading}
-          onChange={(V) => HandleToggle('fastReuploading', V)}
-        />
+      <motion.div variants={iVar} className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-6">
+          <ToggleCard
+            label="Reuploading Enabled"
+            description="Downloads and reuploads assets, keeping session files on disk"
+            value={ReuploadingEnabled}
+            onChange={(V) => HandleToggle('reuploadingEnabled', V)}
+          />
+          <ToggleCard
+            label="Fast Reuploading"
+            description="3x more concurrent workers, no session folder, files deleted immediately. Turns off Reuploading Enabled."
+            value={FastReuploading}
+            onChange={(V) => HandleToggle('fastReuploading', V)}
+          />
+        </div>
         <ToggleCard
           label="Delete After Reupload"
           description="Deletes downloaded files from disk after a successful reupload"
