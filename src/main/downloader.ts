@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import * as https from 'https'
 import FormData from 'form-data'
 
 const ALL_EXTS = ['ogg', 'mp3', 'm4a', 'flac', 'wav']
@@ -308,41 +309,41 @@ export async function UploadAnimation(
     const MimeType = ANIM_MIME_MAP[Ext] ?? 'application/octet-stream'
     const C = SanitizeCookie(Cookie)
 
-    const Form = new FormData()
-    Form.append('name', `anim_${OldId}`)
-    Form.append('description', '')
-    Form.append('assetType', 'Animation')
-    Form.append('isPublic', 'false')
-    Form.append('allowComments', 'false')
-    Form.append('genres', 'All')
-    if (CreatorType === 'Group' && CreatorId > 0) {
-      Form.append('groupId', String(CreatorId))
-    }
-    Form.append('uploadFile', FileData, { filename: `anim_${OldId}.${Ext}`, contentType: MimeType })
-
-    const FormBuffer = Form.getBuffer()
-    const Res = await fetch('https://itemconfiguration.roblox.com/v1/creations/upload', {
-      method: 'POST',
-      headers: {
-        'Cookie': `.ROBLOSECURITY=${C}`,
-        'x-csrf-token': CsrfToken,
-        'User-Agent': 'Roblox/WinInet',
-        ...Form.getHeaders(),
-        'Content-Length': FormBuffer.length.toString(),
-      },
-      body: FormBuffer,
-      signal: AbortSignal.timeout(30000)
+    const QueryString = `assetid=0&type=Animation&name=anim_${OldId}&description=`
+    const UploadResult = await new Promise<{ Status: number; Body: string }>((Resolve, Reject) => {
+      const Req = https.request(
+        {
+          hostname: 'data.roblox.com',
+          path: `/Data/Upload.ashx?${QueryString}`,
+          method: 'POST',
+          headers: {
+            'Cookie': `.ROBLOSECURITY=${C}`,
+            'x-csrf-token': CsrfToken,
+            'Content-Type': MimeType,
+            'User-Agent': 'Roblox/WinInet',
+            'Content-Length': FileData.length,
+          },
+        },
+        (Res) => {
+          const Chunks: Buffer[] = []
+          Res.on('data', (Chunk: Buffer) => Chunks.push(Chunk))
+          Res.on('end', () => Resolve({ Status: Res.statusCode ?? 0, Body: Buffer.concat(Chunks).toString() }))
+          Res.on('error', Reject)
+        }
+      )
+      Req.setTimeout(30000, () => { Req.destroy(); Reject(new Error('upload timed out')) })
+      Req.on('error', Reject)
+      Req.write(FileData)
+      Req.end()
     })
 
-    if (!Res.ok) {
-      const ErrText = await Res.text().catch(() => '')
-      return { Ok: false, NewId: null, Error: `HTTP ${Res.status}: ${ErrText.slice(0, 120)}` }
+    if (UploadResult.Status < 200 || UploadResult.Status >= 300) {
+      return { Ok: false, NewId: null, Error: `HTTP ${UploadResult.Status}: ${UploadResult.Body.slice(0, 120)}` }
     }
 
-    const Body = await Res.json() as { assetId?: number }
-    const NewId = Body.assetId?.toString() ?? null
-    if (!NewId) {
-      return { Ok: false, NewId: null, Error: `No assetId in response: ${JSON.stringify(Body).slice(0, 80)}` }
+    const NewId = UploadResult.Body.trim()
+    if (!/^\d+$/.test(NewId)) {
+      return { Ok: false, NewId: null, Error: `Unexpected response: ${NewId.slice(0, 80)}` }
     }
 
     return { Ok: true, NewId, Error: null }
