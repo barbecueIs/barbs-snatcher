@@ -12,7 +12,7 @@ app.disableHardwareAcceleration()
 app.commandLine.appendSwitch('in-process-gpu')
 
 import Icon from '../../resources/icon.png?asset'
-import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound, SanitizeName, DownloadAnimation, UploadAnimation } from './downloader'
+import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound, SanitizeName, DownloadAnimation, UploadAnimation, CreateDeveloperProduct, CreateGamePass } from './downloader'
 
 interface Config {
   cookie: string
@@ -29,6 +29,14 @@ interface OutputEntry {
   oldId: string
   newId: string
   status: string
+}
+
+interface MonetizationItem {
+  id: string
+  type: 'DeveloperProduct' | 'GamePass'
+  name: string
+  price: number
+  description: string
 }
 
 interface JobState {
@@ -65,6 +73,20 @@ let State: JobState = {
 }
 
 let AnimState: JobState = {
+  status: 'idle',
+  total: 0,
+  done: 0,
+  ok: 0,
+  failed: 0,
+  mapping: {},
+  error: null,
+  failReasons: {},
+  sessionDir: null,
+  sessionName: null,
+  outputs: [],
+}
+
+let MonetState: JobState = {
   status: 'idle',
   total: 0,
   done: 0,
@@ -136,6 +158,13 @@ function SetAnimState(Patch: Partial<JobState>): void {
   AnimState = { ...AnimState, ...Patch }
   MainWindow?.webContents.send('job-update', AnimState)
 }
+
+function SetMonetState(Patch: Partial<JobState>): void {
+  MonetState = { ...MonetState, ...Patch }
+  MainWindow?.webContents.send('job-update', MonetState)
+}
+
+const DelayMs = (Ms: number): Promise<void> => new Promise(R => setTimeout(R, Ms))
 
 async function RunJob(Ids: string[], Names: Record<string, string>, PlaceIds: string[], CreatorType: string, CreatorId: number, DownloadOnly: boolean = false): Promise<void> {
   const Cfg = LoadConfig()
@@ -391,6 +420,87 @@ async function RunAnimationJob(Ids: string[], Names: Record<string, string>, Pla
   SetAnimState({ status: 'complete', done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
 }
 
+async function RunMonetizationJob(Items: MonetizationItem[], UniverseId: number): Promise<void> {
+  const Cfg = LoadConfig()
+  if (!Cfg.cookie) {
+    SetMonetState({ status: 'error', error: 'No cookie set. Go to Settings and paste your .ROBLOSECURITY cookie.' })
+    return
+  }
+  if (!Cfg.apiKey) {
+    SetMonetState({ status: 'error', error: 'No API key set. Go to Settings and add your Open Cloud API key.' })
+    return
+  }
+  if (UniverseId <= 0) {
+    SetMonetState({ status: 'error', error: 'Invalid universe ID. Make sure the game is published to Roblox.' })
+    return
+  }
+
+  const Outputs: OutputEntry[] = Items.map((Item, Index) => ({
+    index: Index + 1,
+    oldId: Item.id,
+    newId: 'Pending',
+    status: 'Waiting...',
+  }))
+
+  SetMonetState({
+    status: 'processing',
+    total: Items.length,
+    done: 0,
+    ok: 0,
+    failed: 0,
+    mapping: {},
+    error: null,
+    failReasons: {},
+    sessionDir: null,
+    sessionName: null,
+    outputs: Outputs,
+  })
+
+  const CsrfToken = await FetchCsrfToken(Cfg.cookie)
+  const Mapping: Record<string, string> = {}
+  const FailReasons: Record<string, number> = {}
+  let Done = 0, Ok = 0, Failed = 0
+
+  const BumpReason = (Msg: string | null): void => {
+    const Key = (Msg ?? 'unknown error').slice(0, 80)
+    FailReasons[Key] = (FailReasons[Key] ?? 0) + 1
+  }
+
+  for (let I = 0; I < Items.length; I++) {
+    const Item = Items[I]
+    const Entry = Outputs[I]
+    Entry.status = `Creating ${Item.type}...`
+    SetMonetState({ outputs: [...Outputs] })
+
+    let Result: { Ok: boolean; NewId: string | null; Error: string | null }
+
+    if (Item.type === 'DeveloperProduct') {
+      Result = await CreateDeveloperProduct(UniverseId, Item.name, Item.description, Item.price, Cfg.cookie, CsrfToken)
+    } else {
+      Result = await CreateGamePass(UniverseId, Item.name, Item.description, Item.price, Cfg.apiKey)
+    }
+
+    Done++
+    if (Result.Ok && Result.NewId) {
+      Ok++
+      Mapping[Item.id] = Result.NewId
+      Entry.newId = Result.NewId
+      Entry.status = 'Created'
+    } else {
+      Failed++
+      BumpReason(Result.Error)
+      Entry.newId = 'Failed'
+      Entry.status = Result.Error ?? 'unknown error'
+    }
+
+    SetMonetState({ done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
+
+    if (I < Items.length - 1) await DelayMs(300)
+  }
+
+  SetMonetState({ status: 'complete', done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
+}
+
 function HandleRequest(Req: http.IncomingMessage, Res: http.ServerResponse): void {
   Res.setHeader('Access-Control-Allow-Origin', '*')
   Res.setHeader('Content-Type', 'application/json')
@@ -462,6 +572,40 @@ function HandleRequest(Req: http.IncomingMessage, Res: http.ServerResponse): voi
   if (Req.method === 'GET' && Req.url === '/animations-status') {
     Res.writeHead(200)
     Res.end(JSON.stringify(AnimState))
+    return
+  }
+
+  if (Req.method === 'POST' && Req.url === '/monetization-process') {
+    if (MonetState.status === 'processing') {
+      Res.writeHead(409)
+      Res.end(JSON.stringify({ error: 'monetization job already running' }))
+      return
+    }
+    let Body = ''
+    Req.on('data', (Chunk) => { Body += Chunk })
+    Req.on('end', () => {
+      try {
+        const Data = JSON.parse(Body) as { items?: MonetizationItem[]; universeId?: number }
+        const Items = (Data.items ?? []).filter(I => I.id && I.type && I.name)
+        if (Items.length === 0) {
+          Res.writeHead(400)
+          Res.end(JSON.stringify({ error: 'no valid items received' }))
+          return
+        }
+        Res.writeHead(200)
+        Res.end(JSON.stringify({ ok: true, count: Items.length }))
+        RunMonetizationJob(Items, Data.universeId ?? 0)
+      } catch {
+        Res.writeHead(400)
+        Res.end(JSON.stringify({ error: 'invalid JSON' }))
+      }
+    })
+    return
+  }
+
+  if (Req.method === 'GET' && Req.url === '/monetization-status') {
+    Res.writeHead(200)
+    Res.end(JSON.stringify(MonetState))
     return
   }
 

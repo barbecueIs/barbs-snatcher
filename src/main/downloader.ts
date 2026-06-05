@@ -12,7 +12,7 @@ const Sleep = (Ms: number): Promise<void> => new Promise((R) => setTimeout(R, Ms
 async function FetchWithRetry(Url: string, Options: RequestInit, MaxRetries = 5): Promise<Response> {
   let Res!: Response
   for (let Attempt = 0; Attempt < MaxRetries; Attempt++) {
-    Res = await fetch(Url, Options)
+    Res = await fetch(Url, { ...Options, signal: AbortSignal.timeout(30000) })
     if (Res.status !== 429) return Res
     const Raw = Res.headers.get('retry-after') ?? ''
     const Secs = parseInt(Raw, 10)
@@ -486,5 +486,81 @@ export async function UploadSound(
     return { Ok: true, NewId: PollResult.NewId, Error: null }
   } catch (Err: unknown) {
     return { Ok: false, NewId: null, Error: Err instanceof Error ? Err.message : 'unknown error' }
+  }
+}
+
+export async function CreateDeveloperProduct(
+  UniverseId: number,
+  Name: string,
+  Description: string,
+  Price: number,
+  Cookie: string,
+  CsrfToken: string
+): Promise<{ Ok: boolean; NewId: string | null; Error: string | null }> {
+  try {
+    const C = SanitizeCookie(Cookie)
+    const Params = new URLSearchParams({
+      name: Name,
+      description: Description,
+      priceInRobux: String(Price),
+      iconImageAssetId: '0',
+    })
+    const Res = await FetchWithRetry(
+      `https://develop.roblox.com/v1/universes/${UniverseId}/developerproducts?${Params}`,
+      {
+        method: 'POST',
+        headers: {
+          'Cookie': `.ROBLOSECURITY=${C}`,
+          'x-csrf-token': CsrfToken,
+          'User-Agent': 'Roblox/WinInet',
+        },
+      }
+    )
+    if (!Res.ok) {
+      const ErrText = await Res.text().catch(() => '')
+      return { Ok: false, NewId: null, Error: `HTTP ${Res.status}: ${ErrText.slice(0, 120)}` }
+    }
+    const Body = await Res.json() as { id?: number }
+    const NewId = Body.id?.toString() ?? null
+    if (!NewId) return { Ok: false, NewId: null, Error: 'no id in response' }
+    return { Ok: true, NewId, Error: null }
+  } catch (Err: unknown) {
+    const Msg = Err instanceof Error ? Err.message : 'unknown error'
+    const Cause = Err instanceof Error && (Err as NodeJS.ErrnoException).cause ? String((Err as NodeJS.ErrnoException).cause) : ''
+    return { Ok: false, NewId: null, Error: Cause ? `${Msg}: ${Cause}` : Msg }
+  }
+}
+
+export async function CreateGamePass(
+  UniverseId: number,
+  Name: string,
+  Description: string,
+  Price: number,
+  ApiKey: string
+): Promise<{ Ok: boolean; NewId: string | null; Error: string | null }> {
+  try {
+    const Res = await FetchWithRetry(
+      `https://apis.roblox.com/cloud/v2/universes/${UniverseId}/game-passes`,
+      {
+        method: 'POST',
+        headers: {
+          'x-api-key': ApiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ displayName: Name, description: Description, price: Price }),
+      }
+    )
+    if (!Res.ok) {
+      const ErrText = await Res.text().catch(() => '')
+      return { Ok: false, NewId: null, Error: `HTTP ${Res.status}: ${ErrText.slice(0, 120)}` }
+    }
+    const Body = await Res.json() as { id?: string; gamePassId?: string; path?: string }
+    const NewId = Body.id ?? Body.gamePassId ?? null
+    if (!NewId) return { Ok: false, NewId: null, Error: `unexpected response: ${JSON.stringify(Body).slice(0, 80)}` }
+    return { Ok: true, NewId, Error: null }
+  } catch (Err: unknown) {
+    const Msg = Err instanceof Error ? Err.message : 'unknown error'
+    const Cause = Err instanceof Error && (Err as NodeJS.ErrnoException).cause ? String((Err as NodeJS.ErrnoException).cause) : ''
+    return { Ok: false, NewId: null, Error: Cause ? `${Msg}: ${Cause}` : Msg }
   }
 }
