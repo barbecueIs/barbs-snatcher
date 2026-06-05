@@ -9,6 +9,19 @@ const RETRY_MS = 150
 
 const Sleep = (Ms: number): Promise<void> => new Promise((R) => setTimeout(R, Ms))
 
+async function FetchWithRetry(Url: string, Options: RequestInit, MaxRetries = 5): Promise<Response> {
+  let Res!: Response
+  for (let Attempt = 0; Attempt < MaxRetries; Attempt++) {
+    Res = await fetch(Url, Options)
+    if (Res.status !== 429) return Res
+    const Raw = Res.headers.get('retry-after') ?? ''
+    const Secs = parseInt(Raw, 10)
+    const WaitMs = (isNaN(Secs) || Secs <= 0 ? 2 : Math.min(Secs, 60)) * 1000 + 500
+    await Sleep(WaitMs)
+  }
+  return Res
+}
+
 function DetectExt(Buf: Buffer): string {
   if (!Buf || Buf.length < 12) return 'ogg'
   if (Buf[0] === 0x4f && Buf[1] === 0x67 && Buf[2] === 0x67 && Buf[3] === 0x53) return 'ogg'
@@ -327,7 +340,7 @@ export async function UploadAnimation(
     })
 
     const FormBuffer = Form.getBuffer()
-    const Res = await fetch('https://apis.roblox.com/assets/v1/assets', {
+    const Res = await FetchWithRetry('https://apis.roblox.com/assets/v1/assets', {
       method: 'POST',
       headers: {
         'x-api-key': ApiKey,
@@ -362,8 +375,8 @@ async function PollOperation(
   OpPath: string,
   ApiKey: string
 ): Promise<{ NewId: string | null; Error: string | null }> {
-  const MAX_POLL_MS = 90_000
-  const POLL_INTERVAL_MS = 600
+  const MAX_POLL_MS = 180_000
+  const POLL_INTERVAL_MS = 1000
   await Sleep(1500)
   const Deadline = Date.now() + MAX_POLL_MS
   while (Date.now() < Deadline) {
@@ -373,7 +386,14 @@ async function PollOperation(
         signal: AbortSignal.timeout(12000)
       })
       if (!Res.ok) {
-        if (Res.status === 429 || Res.status >= 500) {
+        if (Res.status === 429) {
+          const Raw = Res.headers.get('retry-after') ?? ''
+          const Secs = parseInt(Raw, 10)
+          const WaitMs = (isNaN(Secs) || Secs <= 0 ? 3 : Math.min(Secs, 60)) * 1000 + 500
+          await Sleep(WaitMs)
+          continue
+        }
+        if (Res.status >= 500) {
           await Sleep(POLL_INTERVAL_MS)
           continue
         }
@@ -397,7 +417,7 @@ async function PollOperation(
     }
     await Sleep(POLL_INTERVAL_MS)
   }
-  return { NewId: null, Error: 'operation timed out after 90s' }
+  return { NewId: null, Error: 'operation timed out after 180s' }
 }
 
 const MIME_MAP: Record<string, string> = {
@@ -440,7 +460,7 @@ export async function UploadSound(
     })
 
     const FormBuffer = Form.getBuffer()
-    const Res = await fetch('https://apis.roblox.com/assets/v1/assets', {
+    const Res = await FetchWithRetry('https://apis.roblox.com/assets/v1/assets', {
       method: 'POST',
       headers: {
         'x-api-key': ApiKey,
