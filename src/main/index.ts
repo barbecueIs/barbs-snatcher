@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog, Notification } from 'electron'
 import { join, basename, dirname, resolve, normalize } from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
@@ -12,7 +12,7 @@ app.disableHardwareAcceleration()
 app.commandLine.appendSwitch('in-process-gpu')
 
 import Icon from '../../resources/icon.png?asset'
-import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound, SanitizeName, DownloadAnimation, UploadAnimation, CreateDeveloperProduct, CreateGamePass } from './downloader'
+import { FetchCsrfToken, FetchUserId, DownloadSound, UploadSound, SanitizeName, DownloadAnimation, UploadAnimation, CreateDeveloperProduct, CreateGamePass, FetchAllDeveloperProducts, FetchAllGamePasses } from './downloader'
 
 interface Config {
   cookie: string
@@ -435,6 +435,13 @@ async function RunMonetizationJob(Items: MonetizationItem[], UniverseId: number)
     return
   }
 
+  const [ExistingProducts, ExistingPasses] = await Promise.all([
+    FetchAllDeveloperProducts(UniverseId, Cfg.apiKey).catch(() => [] as { productId: number; name: string }[]),
+    FetchAllGamePasses(UniverseId, Cfg.apiKey).catch(() => [] as { gamePassId: number; name: string }[]),
+  ])
+  const ProductNameMap = new Map(ExistingProducts.map(P => [P.name.toLowerCase(), P.productId.toString()]))
+  const PassNameMap = new Map(ExistingPasses.map(P => [P.name.toLowerCase(), P.gamePassId.toString()]))
+
   const Outputs: OutputEntry[] = Items.map((Item, Index) => ({
     index: Index + 1,
     oldId: Item.id,
@@ -456,7 +463,6 @@ async function RunMonetizationJob(Items: MonetizationItem[], UniverseId: number)
     outputs: Outputs,
   })
 
-  const CsrfToken = await FetchCsrfToken(Cfg.cookie)
   const Mapping: Record<string, string> = {}
   const FailReasons: Record<string, number> = {}
   let Done = 0, Ok = 0, Failed = 0
@@ -469,13 +475,28 @@ async function RunMonetizationJob(Items: MonetizationItem[], UniverseId: number)
   for (let I = 0; I < Items.length; I++) {
     const Item = Items[I]
     const Entry = Outputs[I]
+    const ExistingId = Item.type === 'DeveloperProduct'
+      ? ProductNameMap.get(Item.name.toLowerCase())
+      : PassNameMap.get(Item.name.toLowerCase())
+
+    if (ExistingId) {
+      Done++
+      Ok++
+      Mapping[Item.id] = ExistingId
+      Entry.newId = ExistingId
+      Entry.status = 'Already exists'
+      SetMonetState({ done: Done, ok: Ok, failed: Failed, mapping: { ...Mapping }, failReasons: { ...FailReasons }, outputs: [...Outputs] })
+      if (I < Items.length - 1) await DelayMs(300)
+      continue
+    }
+
     Entry.status = `Creating ${Item.type}...`
     SetMonetState({ outputs: [...Outputs] })
 
     let Result: { Ok: boolean; NewId: string | null; Error: string | null }
 
     if (Item.type === 'DeveloperProduct') {
-      Result = await CreateDeveloperProduct(UniverseId, Item.name, Item.description, Item.price, Cfg.cookie, CsrfToken)
+      Result = await CreateDeveloperProduct(UniverseId, Item.name, Item.description, Item.price, Cfg.apiKey)
     } else {
       Result = await CreateGamePass(UniverseId, Item.name, Item.description, Item.price, Cfg.apiKey)
     }
@@ -702,6 +723,44 @@ function CopyFolderSync(From: string, To: string): void {
   }
 }
 
+async function CheckForUpdateNotification(): Promise<void> {
+  try {
+    const Res = await fetch('https://api.github.com/repos/barbecueIs/barbs-snatcher/releases/latest', {
+      headers: { 'User-Agent': 'barbs-snatcher-launcher', Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!Res.ok) return
+    const Body = await Res.json() as { tag_name?: string; assets?: { name?: string; browser_download_url?: string }[] }
+    const LatestVersion = (Body.tag_name ?? '').replace(/^v/, '')
+    if (!LatestVersion || LatestVersion === app.getVersion()) return
+    const NsisAsset = (Body.assets ?? []).find(A => A.name?.endsWith('-setup.exe') && !A.name?.includes('squirrel'))
+    const DownloadUrl = NsisAsset?.browser_download_url
+    if (!DownloadUrl) return
+    if (!Notification.isSupported()) return
+    const Notif = new Notification({
+      title: "Barb's Snatcher Update",
+      body: `v${LatestVersion} is available`,
+      actions: [{ type: 'button', text: 'Update' }, { type: 'button', text: 'Ignore' }],
+    })
+    Notif.on('action', (_Evt, Index) => {
+      if (Index !== 0) return
+      const TmpPath = join(os.tmpdir(), `barbs-snatcher-update-${Date.now()}.exe`)
+      DownloadFile(DownloadUrl, TmpPath).then(() => {
+        spawn(TmpPath, [], { detached: true, stdio: 'ignore' }).unref()
+        app.quit()
+      }).catch(() => {
+        MainWindow?.show()
+        MainWindow?.focus()
+      })
+    })
+    Notif.on('click', () => {
+      MainWindow?.show()
+      MainWindow?.focus()
+    })
+    Notif.show()
+  } catch {}
+}
+
 function CreateInstallerWindow(): void {
   MainWindow = new BrowserWindow({
     width: 600,
@@ -748,6 +807,7 @@ function CreateWindow(): void {
   MainWindow.on('ready-to-show', () => {
     MainWindow!.show()
     MainWindow!.focus()
+    setTimeout(() => CheckForUpdateNotification(), 4000)
   })
 
   setTimeout(() => {

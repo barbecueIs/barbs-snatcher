@@ -106,41 +106,46 @@ export async function FetchUserId(Cookie: string): Promise<number | null> {
 async function FetchBinary(
   Url: string,
   Headers: Record<string, string>
-): Promise<Buffer | null> {
+): Promise<{ Buf: Buffer | null; Err: string | null }> {
   try {
     const Res = await fetch(Url, { headers: Headers, signal: AbortSignal.timeout(20000) })
-    if (!Res.ok) return null
-    const Buf = Buffer.from(await Res.arrayBuffer())
-    return IsValidAudio(Buf) ? Buf : null
-  } catch {
-    return null
+    if (!Res.ok) return { Buf: null, Err: `HTTP ${Res.status}` }
+    const Raw = Buffer.from(await Res.arrayBuffer())
+    if (!IsValidAudio(Raw)) return { Buf: null, Err: `unrecognized format (${Raw.length}b, 0x${Raw.slice(0, 4).toString('hex')})` }
+    return { Buf: Raw, Err: null }
+  } catch (E) {
+    return { Buf: null, Err: E instanceof Error ? E.message : 'fetch error' }
   }
 }
 
 async function TryCdnWithPlaceId(
   Id: string,
   Headers: Record<string, string>
-): Promise<Buffer | null> {
+): Promise<{ Buf: Buffer | null; Err: string | null }> {
   const [V2Result, V1Result] = await Promise.allSettled([
-    (async (): Promise<Buffer | null> => {
+    (async (): Promise<{ Buf: Buffer | null; Err: string | null }> => {
       try {
         const Meta = await fetch(
           `https://assetdelivery.roblox.com/v2/asset?id=${Id}`,
           { headers: Headers, signal: AbortSignal.timeout(10000) }
         )
-        if (!Meta.ok) return null
+        if (!Meta.ok) return { Buf: null, Err: `v2 meta HTTP ${Meta.status}` }
         const MetaBody = (await Meta.json()) as { location?: string; locations?: { assetUrl?: string }[] }
         const CdnUrl = MetaBody.location ?? MetaBody.locations?.[0]?.assetUrl
-        return CdnUrl ? FetchBinary(CdnUrl, Headers) : null
-      } catch {
-        return null
+        if (!CdnUrl) return { Buf: null, Err: 'v2 no cdn url in response' }
+        return FetchBinary(CdnUrl, Headers)
+      } catch (E) {
+        return { Buf: null, Err: E instanceof Error ? `v2 ${E.message}` : 'v2 error' }
       }
     })(),
     FetchBinary(`https://assetdelivery.roblox.com/v1/asset/?id=${Id}`, Headers),
   ])
-  const V2Buf = V2Result.status === 'fulfilled' ? V2Result.value : null
-  const V1Buf = V1Result.status === 'fulfilled' ? V1Result.value : null
-  return V2Buf ?? V1Buf
+  const V2Res = V2Result.status === 'fulfilled' ? V2Result.value : { Buf: null, Err: V2Result.reason instanceof Error ? `v2 ${V2Result.reason.message}` : 'v2 rejected' }
+  const V1Res = V1Result.status === 'fulfilled' ? V1Result.value : { Buf: null, Err: V1Result.reason instanceof Error ? `v1 ${V1Result.reason.message}` : 'v1 rejected' }
+  if (V2Res.Buf) return { Buf: V2Res.Buf, Err: null }
+  if (V1Res.Buf) return { Buf: V1Res.Buf, Err: null }
+  const Err = [V2Res.Err, V1Res.Err].filter(Boolean).join('; ') || 'both strategies failed'
+  return { Buf: null, Err }
 }
 
 export async function DownloadSound(
@@ -180,18 +185,23 @@ export async function DownloadSound(
 
   if (!AudioBuf) {
     const PidsToTry = PlaceIds.length > 0 ? PlaceIds : ['']
+    const CdnErrors: string[] = []
     outer: for (const Pid of PidsToTry) {
       const H = BuildCdnHeaders(Cookie, CsrfToken, Pid)
       for (let Attempt = 1; Attempt <= MAX_RETRIES; Attempt++) {
-        const CdnBuf = await TryCdnWithPlaceId(Id, H)
-        if (CdnBuf) {
-          AudioBuf = CdnBuf
+        const CdnRes = await TryCdnWithPlaceId(Id, H)
+        if (CdnRes.Buf) {
+          AudioBuf = CdnRes.Buf
           break outer
         }
+        if (CdnRes.Err) CdnErrors.push(CdnRes.Err)
         if (Attempt < MAX_RETRIES) await Sleep(RETRY_MS)
       }
     }
-    if (!AudioBuf) LastErr = 'all CDN strategies failed'
+    if (!AudioBuf) {
+      const Detail = CdnErrors.length > 0 ? CdnErrors[0] : 'no details'
+      LastErr = `all CDN strategies failed (${Detail})`
+    }
   }
 
   if (AudioBuf) {
@@ -494,35 +504,37 @@ export async function CreateDeveloperProduct(
   Name: string,
   Description: string,
   Price: number,
-  Cookie: string,
-  CsrfToken: string
+  ApiKey: string
 ): Promise<{ Ok: boolean; NewId: string | null; Error: string | null }> {
   try {
-    const C = SanitizeCookie(Cookie)
-    const Params = new URLSearchParams({
-      name: Name,
-      description: Description,
-      priceInRobux: String(Price),
-      iconImageAssetId: '0',
-    })
+    const Form = new FormData()
+    Form.append('name', Name)
+    if (Price > 0) {
+      Form.append('price', String(Price))
+      Form.append('isForSale', 'true')
+    }
+    if (Description) Form.append('description', Description)
+
+    const FormBuffer = Form.getBuffer()
     const Res = await FetchWithRetry(
-      `https://develop.roblox.com/v1/universes/${UniverseId}/developerproducts?${Params}`,
+      `https://apis.roblox.com/developer-products/v2/universes/${UniverseId}/developer-products`,
       {
         method: 'POST',
         headers: {
-          'Cookie': `.ROBLOSECURITY=${C}`,
-          'x-csrf-token': CsrfToken,
-          'User-Agent': 'Roblox/WinInet',
+          'x-api-key': ApiKey,
+          ...Form.getHeaders(),
+          'Content-Length': FormBuffer.length.toString(),
         },
+        body: FormBuffer,
       }
     )
     if (!Res.ok) {
       const ErrText = await Res.text().catch(() => '')
       return { Ok: false, NewId: null, Error: `HTTP ${Res.status}: ${ErrText.slice(0, 120)}` }
     }
-    const Body = await Res.json() as { id?: number }
-    const NewId = Body.id?.toString() ?? null
-    if (!NewId) return { Ok: false, NewId: null, Error: 'no id in response' }
+    const Body = await Res.json() as { productId?: number }
+    const NewId = Body.productId?.toString() ?? null
+    if (!NewId) return { Ok: false, NewId: null, Error: 'no productId in response' }
     return { Ok: true, NewId, Error: null }
   } catch (Err: unknown) {
     const Msg = Err instanceof Error ? Err.message : 'unknown error'
@@ -539,28 +551,76 @@ export async function CreateGamePass(
   ApiKey: string
 ): Promise<{ Ok: boolean; NewId: string | null; Error: string | null }> {
   try {
+    const Form = new FormData()
+    Form.append('name', Name)
+    if (Price > 0) {
+      Form.append('price', String(Price))
+      Form.append('isForSale', 'true')
+    }
+    if (Description) Form.append('description', Description)
+
+    const FormBuffer = Form.getBuffer()
     const Res = await FetchWithRetry(
-      `https://apis.roblox.com/cloud/v2/universes/${UniverseId}/game-passes`,
+      `https://apis.roblox.com/game-passes/v1/universes/${UniverseId}/game-passes`,
       {
         method: 'POST',
         headers: {
           'x-api-key': ApiKey,
-          'Content-Type': 'application/json',
+          ...Form.getHeaders(),
+          'Content-Length': FormBuffer.length.toString(),
         },
-        body: JSON.stringify({ displayName: Name, description: Description, price: Price }),
+        body: FormBuffer,
       }
     )
     if (!Res.ok) {
       const ErrText = await Res.text().catch(() => '')
       return { Ok: false, NewId: null, Error: `HTTP ${Res.status}: ${ErrText.slice(0, 120)}` }
     }
-    const Body = await Res.json() as { id?: string; gamePassId?: string; path?: string }
-    const NewId = Body.id ?? Body.gamePassId ?? null
-    if (!NewId) return { Ok: false, NewId: null, Error: `unexpected response: ${JSON.stringify(Body).slice(0, 80)}` }
+    const Body = await Res.json() as { gamePassId?: number }
+    const NewId = Body.gamePassId?.toString() ?? null
+    if (!NewId) return { Ok: false, NewId: null, Error: 'no gamePassId in response' }
     return { Ok: true, NewId, Error: null }
   } catch (Err: unknown) {
     const Msg = Err instanceof Error ? Err.message : 'unknown error'
     const Cause = Err instanceof Error && (Err as NodeJS.ErrnoException).cause ? String((Err as NodeJS.ErrnoException).cause) : ''
     return { Ok: false, NewId: null, Error: Cause ? `${Msg}: ${Cause}` : Msg }
   }
+}
+
+export async function FetchAllDeveloperProducts(
+  UniverseId: number,
+  ApiKey: string
+): Promise<{ productId: number; name: string }[]> {
+  const Results: { productId: number; name: string }[] = []
+  let Cursor: string | undefined
+  do {
+    const Url = `https://apis.roblox.com/developer-products/v2/universes/${UniverseId}/developer-products/creator${Cursor ? `?pageToken=${encodeURIComponent(Cursor)}` : ''}`
+    try {
+      const Res = await FetchWithRetry(Url, { headers: { 'x-api-key': ApiKey } })
+      if (!Res.ok) break
+      const Body = await Res.json() as { developerProducts?: { productId: number; name: string }[]; nextPageToken?: string }
+      for (const P of Body.developerProducts ?? []) Results.push({ productId: P.productId, name: P.name })
+      Cursor = Body.nextPageToken || undefined
+    } catch { break }
+  } while (Cursor)
+  return Results
+}
+
+export async function FetchAllGamePasses(
+  UniverseId: number,
+  ApiKey: string
+): Promise<{ gamePassId: number; name: string }[]> {
+  const Results: { gamePassId: number; name: string }[] = []
+  let Cursor: string | undefined
+  do {
+    const Url = `https://apis.roblox.com/game-passes/v1/universes/${UniverseId}/game-passes/creator${Cursor ? `?pageToken=${encodeURIComponent(Cursor)}` : ''}`
+    try {
+      const Res = await FetchWithRetry(Url, { headers: { 'x-api-key': ApiKey } })
+      if (!Res.ok) break
+      const Body = await Res.json() as { gamePasses?: { gamePassId: number; name: string }[]; nextPageToken?: string | null }
+      for (const P of Body.gamePasses ?? []) Results.push({ gamePassId: P.gamePassId, name: P.name })
+      Cursor = Body.nextPageToken || undefined
+    } catch { break }
+  } while (Cursor)
+  return Results
 }
