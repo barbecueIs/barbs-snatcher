@@ -13,6 +13,8 @@ local QUICK = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out
 
 local UI = {}
 UI.StatusLabel = nil
+UI.AnimStatusLabel = nil
+UI.MonetStatusLabel = nil
 UI.FooterStatus = nil
 UI.RowScripts = nil
 UI.RowIntValues = nil
@@ -36,9 +38,9 @@ function UI.RebuildPlaceList()
 		local Row = Instance.new("Frame")
 		Row.Name = "PlaceEntry"
 		Row.Size = UDim2.new(1, 0, 0, 28)
-		Row.BackgroundColor3 = ROW_BG
+		Row.BackgroundColor3 = BORDER_COLOR
 		Row.BackgroundTransparency = 0
-		Row.BorderSizePixel = 1
+		Row.BorderSizePixel = 0
 		Row.Parent = UI.PlaceList
 
 		local IdLabel = Instance.new("TextLabel")
@@ -60,7 +62,7 @@ function UI.RebuildPlaceList()
 		RemoveBtn.Position = UDim2.new(1, -28, 0.5, -10)
 		RemoveBtn.BackgroundColor3 = BORDER_COLOR
 		RemoveBtn.BackgroundTransparency = 0
-		RemoveBtn.BorderSizePixel = 1
+		RemoveBtn.BorderSizePixel = 0
 		RemoveBtn.Text = "x"
 		RemoveBtn.TextColor3 = MUTED_COLOR
 		RemoveBtn.Font = Enum.Font.GothamBold
@@ -136,10 +138,21 @@ function UI.Init(PluginRef, PluginScript)
 	local VMain = MainContent:WaitForChild("MainView")
 	local VConfig = MainContent:WaitForChild("ConfigView")
 
-	local SoundsSection = VMain:WaitForChild("Inner"):WaitForChild("SoundsSection")
+	local ScrollFrame = VMain:WaitForChild("ScrollingFrame")
+	local SoundsSection = ScrollFrame:WaitForChild("Inner_Sounds"):WaitForChild("SoundsSection")
 	local BtnSoundAll = UI.SetupCyberBtn(SoundsSection:WaitForChild("AllCont"))
 	local BtnSoundSel = UI.SetupCyberBtn(SoundsSection:WaitForChild("SelectedCont"))
 	UI.StatusLabel = SoundsSection:WaitForChild("StatusLabel")
+
+	local AnimationsSection = ScrollFrame:WaitForChild("Inner_Animations"):WaitForChild("AnimationsSection")
+	local BtnAnimAll = UI.SetupCyberBtn(AnimationsSection:WaitForChild("AllCont"))
+	local BtnAnimSel = UI.SetupCyberBtn(AnimationsSection:WaitForChild("SelectedCont"))
+	UI.AnimStatusLabel = AnimationsSection:WaitForChild("StatusLabel")
+
+	local MonetSection = ScrollFrame:WaitForChild("Inner_Monetization"):WaitForChild("SoundsSection")
+	local BtnMonetAll = UI.SetupCyberBtn(MonetSection:WaitForChild("AllCont"))
+	local BtnMonetSel = UI.SetupCyberBtn(MonetSection:WaitForChild("SelectedCont"))
+	UI.MonetStatusLabel = MonetSection:WaitForChild("StatusLabel")
 
 	local ConfigInner = VConfig:WaitForChild("Inner")
 	local Toggles = ConfigInner:WaitForChild("Toggles")
@@ -181,6 +194,8 @@ function UI.Init(PluginRef, PluginScript)
 
 	local function SwitchView(NewView, ActiveBtn, OtherBtn)
 		if ActiveView == NewView then return end
+		OtherBtn:SetAttribute("IsActive", false)
+		ActiveBtn:SetAttribute("IsActive", true)
 		local AL = ActiveBtn:WaitForChild("ActiveLine")
 		local AI = ActiveBtn:WaitForChild("Icon")
 		local OL = OtherBtn:WaitForChild("ActiveLine")
@@ -204,6 +219,7 @@ function UI.Init(PluginRef, PluginScript)
 
 	BMain.MouseButton1Click:Connect(function() SwitchView(VMain, BMain, BConfig) end)
 	BConfig.MouseButton1Click:Connect(function() SwitchView(VConfig, BConfig, BMain) end)
+	BMain:SetAttribute("IsActive", true)
 	CloseBtn.MouseButton1Click:Connect(function() ScreenGui.Enabled = false end)
 
 	local Toolbar = PluginRef:CreateToolbar("B-SNATCHER")
@@ -220,7 +236,7 @@ function UI.Init(PluginRef, PluginScript)
 		end
 	end)
 
-	return BtnSoundAll, BtnSoundSel
+	return BtnSoundAll, BtnSoundSel, BtnAnimAll, BtnAnimSel, BtnMonetAll, BtnMonetSel
 end
 
 function UI.SetupDrag(MainFrame)
@@ -257,13 +273,13 @@ function UI.SetupNav(Btn)
 	local Line = Btn:WaitForChild("ActiveLine")
 	local Icon = Btn:WaitForChild("Icon")
 	Btn.MouseEnter:Connect(function()
-		if Line.BackgroundTransparency ~= 0 then
+		if not Btn:GetAttribute("IsActive") then
 			TweenService:Create(Btn, QUICK, {BackgroundTransparency = 0.95, TextColor3 = TEXT_COLOR}):Play()
 			TweenService:Create(Icon, QUICK, {ImageColor3 = TEXT_COLOR}):Play()
 		end
 	end)
 	Btn.MouseLeave:Connect(function()
-		if Line.BackgroundTransparency ~= 0 then
+		if not Btn:GetAttribute("IsActive") then
 			TweenService:Create(Btn, QUICK, {BackgroundTransparency = 1, TextColor3 = MUTED_COLOR}):Play()
 			TweenService:Create(Icon, QUICK, {ImageColor3 = MUTED_COLOR}):Play()
 		end
@@ -315,6 +331,16 @@ end
 
 function UI.SetStatus(Msg)
 	if UI.StatusLabel then UI.StatusLabel.Text = Msg end
+	if UI.FooterStatus then UI.FooterStatus.Text = Msg end
+end
+
+function UI.SetAnimStatus(Msg)
+	if UI.AnimStatusLabel then UI.AnimStatusLabel.Text = Msg end
+	if UI.FooterStatus then UI.FooterStatus.Text = Msg end
+end
+
+function UI.SetMonetStatus(Msg)
+	if UI.MonetStatusLabel then UI.MonetStatusLabel.Text = Msg end
 	if UI.FooterStatus then UI.FooterStatus.Text = Msg end
 end
 
