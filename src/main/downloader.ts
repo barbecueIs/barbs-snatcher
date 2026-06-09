@@ -118,6 +118,63 @@ async function FetchBinary(
   }
 }
 
+async function AutoDiscoverPlaceIds(Id: string): Promise<string[]> {
+  try {
+    const DetailsRes = await fetch(`https://economy.roblox.com/v2/assets/${Id}/details`, {
+      signal: AbortSignal.timeout(8000)
+    })
+    if (!DetailsRes.ok) return []
+    const Details = await DetailsRes.json() as { Creator?: { Id?: number; CreatorType?: string } }
+    const CreatorType = Details.Creator?.CreatorType ?? 'User'
+    const CreatorId = Details.Creator?.Id
+    if (!CreatorId) return []
+
+    const GamesUrl = CreatorType === 'Group'
+      ? `https://games.roblox.com/v2/groups/${CreatorId}/games?limit=25&sortOrder=Desc`
+      : `https://games.roblox.com/v2/users/${CreatorId}/games?limit=25&sortOrder=Desc`
+
+    const [GamesResult, FriendsResult] = await Promise.allSettled([
+      fetch(GamesUrl, { signal: AbortSignal.timeout(8000) }),
+      CreatorType === 'User'
+        ? fetch(`https://friends.roblox.com/v1/users/${CreatorId}/friends`, { signal: AbortSignal.timeout(8000) })
+        : Promise.resolve(null as unknown as Response)
+    ])
+
+    const PlaceIds: string[] = []
+
+    if (GamesResult.status === 'fulfilled' && GamesResult.value?.ok) {
+      const Body = await GamesResult.value.json() as { data?: { rootPlaceId?: number }[] }
+      for (const G of Body.data ?? []) {
+        if (G.rootPlaceId) PlaceIds.push(String(G.rootPlaceId))
+      }
+    }
+
+    if (FriendsResult.status === 'fulfilled' && FriendsResult.value?.ok) {
+      const FBody = await FriendsResult.value.json() as { data?: { id?: number }[] }
+      const FriendIds = (FBody.data ?? []).slice(0, 5).filter(F => F.id).map(F => F.id as number)
+      const FriendGameResults = await Promise.allSettled(
+        FriendIds.map(Fid =>
+          fetch(`https://games.roblox.com/v2/users/${Fid}/games?limit=25&sortOrder=Desc`, {
+            signal: AbortSignal.timeout(8000)
+          })
+        )
+      )
+      for (const R of FriendGameResults) {
+        if (R.status === 'fulfilled' && R.value.ok) {
+          const GBody = await R.value.json() as { data?: { rootPlaceId?: number }[] }
+          for (const G of GBody.data ?? []) {
+            if (G.rootPlaceId) PlaceIds.push(String(G.rootPlaceId))
+          }
+        }
+      }
+    }
+
+    return PlaceIds
+  } catch {
+    return []
+  }
+}
+
 async function TryCdnWithPlaceId(
   Id: string,
   Headers: Record<string, string>
@@ -198,6 +255,16 @@ export async function DownloadSound(
         if (Attempt < MAX_RETRIES) await Sleep(RETRY_MS)
       }
     }
+    if (!AudioBuf && CdnErrors.some(E => E.includes('403'))) {
+      const DiscoveredIds = await AutoDiscoverPlaceIds(Id)
+      for (const Pid of DiscoveredIds) {
+        if (!Pid || PlaceIds.includes(Pid)) continue
+        const H = BuildCdnHeaders(Cookie, CsrfToken, Pid)
+        const Res = await TryCdnWithPlaceId(Id, H)
+        if (Res.Buf) { AudioBuf = Res.Buf; break }
+      }
+    }
+
     if (!AudioBuf) {
       const Detail = CdnErrors.length > 0 ? CdnErrors[0] : 'no details'
       LastErr = `all CDN strategies failed (${Detail})`

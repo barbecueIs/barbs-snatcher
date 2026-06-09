@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.0.42",
+    "date": "2026-06-09",
+    "notes": [
+      "403 downloads now auto-discover the correct Place ID by checking the asset creator's games and up to 5 of their friends' games"
+    ]
+  },
+  {
     "version": "1.0.41",
     "date": "2026-06-09",
     "notes": [
