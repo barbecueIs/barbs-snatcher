@@ -1,5 +1,14 @@
 [
   {
+    "version": "1.0.43",
+    "date": "2026-06-09",
+    "notes": [
+      "403 errors now include the actual Roblox response body so the failure reason is visible",
+      "Place ID auto-discovery now sends the cookie to the economy API, fixing silent failures when the endpoint requires auth",
+      "Added www.roblox.com/asset/ as a third parallel CDN strategy alongside the two assetdelivery endpoints"
+    ]
+  },
+  {
     "version": "1.0.42",
     "date": "2026-06-09",
     "notes": [

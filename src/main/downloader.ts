@@ -109,7 +109,11 @@ async function FetchBinary(
 ): Promise<{ Buf: Buffer | null; Err: string | null }> {
   try {
     const Res = await fetch(Url, { headers: Headers, signal: AbortSignal.timeout(20000) })
-    if (!Res.ok) return { Buf: null, Err: `HTTP ${Res.status}` }
+    if (!Res.ok) {
+      let Body = ''
+      try { Body = (await Res.text()).replace(/\s+/g, ' ').trim().slice(0, 100) } catch {}
+      return { Buf: null, Err: Body ? `HTTP ${Res.status} (${Body})` : `HTTP ${Res.status}` }
+    }
     const Raw = Buffer.from(await Res.arrayBuffer())
     if (!IsValidAudio(Raw)) return { Buf: null, Err: `unrecognized format (${Raw.length}b, 0x${Raw.slice(0, 4).toString('hex')})` }
     return { Buf: Raw, Err: null }
@@ -118,9 +122,13 @@ async function FetchBinary(
   }
 }
 
-async function AutoDiscoverPlaceIds(Id: string): Promise<string[]> {
+async function AutoDiscoverPlaceIds(Id: string, Cookie: string): Promise<string[]> {
+  const C = SanitizeCookie(Cookie)
+  const AuthHdr: Record<string, string> = { 'User-Agent': 'Roblox/WinInet' }
+  if (C) AuthHdr['Cookie'] = `.ROBLOSECURITY=${C}`
   try {
     const DetailsRes = await fetch(`https://economy.roblox.com/v2/assets/${Id}/details`, {
+      headers: AuthHdr,
       signal: AbortSignal.timeout(8000)
     })
     if (!DetailsRes.ok) return []
@@ -179,14 +187,19 @@ async function TryCdnWithPlaceId(
   Id: string,
   Headers: Record<string, string>
 ): Promise<{ Buf: Buffer | null; Err: string | null }> {
-  const [V2Result, V1Result] = await Promise.allSettled([
-    (async (): Promise<{ Buf: Buffer | null; Err: string | null }> => {
+  type CdnResult = { Buf: Buffer | null; Err: string | null }
+  const Results = await Promise.allSettled<CdnResult>([
+    (async (): Promise<CdnResult> => {
       try {
         const Meta = await fetch(
           `https://assetdelivery.roblox.com/v2/asset?id=${Id}`,
           { headers: Headers, signal: AbortSignal.timeout(10000) }
         )
-        if (!Meta.ok) return { Buf: null, Err: `v2 meta HTTP ${Meta.status}` }
+        if (!Meta.ok) {
+          let Body = ''
+          try { Body = (await Meta.text()).replace(/\s+/g, ' ').trim().slice(0, 100) } catch {}
+          return { Buf: null, Err: Body ? `v2 meta HTTP ${Meta.status} (${Body})` : `v2 meta HTTP ${Meta.status}` }
+        }
         const MetaBody = (await Meta.json()) as { location?: string; locations?: { assetUrl?: string }[] }
         const CdnUrl = MetaBody.location ?? MetaBody.locations?.[0]?.assetUrl
         if (!CdnUrl) return { Buf: null, Err: 'v2 no cdn url in response' }
@@ -196,12 +209,15 @@ async function TryCdnWithPlaceId(
       }
     })(),
     FetchBinary(`https://assetdelivery.roblox.com/v1/asset/?id=${Id}`, Headers),
+    FetchBinary(`https://www.roblox.com/asset/?id=${Id}`, Headers),
   ])
-  const V2Res = V2Result.status === 'fulfilled' ? V2Result.value : { Buf: null, Err: V2Result.reason instanceof Error ? `v2 ${V2Result.reason.message}` : 'v2 rejected' }
-  const V1Res = V1Result.status === 'fulfilled' ? V1Result.value : { Buf: null, Err: V1Result.reason instanceof Error ? `v1 ${V1Result.reason.message}` : 'v1 rejected' }
-  if (V2Res.Buf) return { Buf: V2Res.Buf, Err: null }
-  if (V1Res.Buf) return { Buf: V1Res.Buf, Err: null }
-  const Err = [V2Res.Err, V1Res.Err].filter(Boolean).join('; ') || 'both strategies failed'
+  const Resolved = Results.map((R): CdnResult =>
+    R.status === 'fulfilled' ? R.value : { Buf: null, Err: R.reason instanceof Error ? R.reason.message : 'rejected' }
+  )
+  for (const R of Resolved) {
+    if (R.Buf) return { Buf: R.Buf, Err: null }
+  }
+  const Err = Resolved.map(R => R.Err).filter(Boolean).join('; ') || 'all strategies failed'
   return { Buf: null, Err }
 }
 
@@ -256,7 +272,7 @@ export async function DownloadSound(
       }
     }
     if (!AudioBuf && CdnErrors.some(E => E.includes('403'))) {
-      const DiscoveredIds = await AutoDiscoverPlaceIds(Id)
+      const DiscoveredIds = await AutoDiscoverPlaceIds(Id, Cookie)
       for (const Pid of DiscoveredIds) {
         if (!Pid || PlaceIds.includes(Pid)) continue
         const H = BuildCdnHeaders(Cookie, CsrfToken, Pid)
