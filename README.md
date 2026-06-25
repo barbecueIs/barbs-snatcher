@@ -35,7 +35,12 @@ The plugin source file (`Barb's Snatcher - SOURCE.rbxmx`) is attached to the [la
 
 ## Notes
 
-Currently supports audio assets only. Animation reuploading and other asset types may come later.
+Currently supports:
+audio
+animation (CURRENTLY W.I.P, PLEASE USE OTHER ALTERNATIVES TILL FINISHED)
+monetization (gamepasses, developer products)
+
+Others may come later on in developement.
 
 ---
 
